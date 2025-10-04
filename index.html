@@ -26,10 +26,38 @@
     </header>
 
     <main>
+      <section id="subjectDesignSection" class="hidden">
+        <h2 id="selectedClassName">Class Name - Subject Design</h2>
+        <div class="subject-design-container">
+          <div class="exam-details">
+            <input id="examName" type="text" placeholder="Exam name (e.g., Final Examination 2025)" />
+            <button id="addSubjectRow" class="btn primary">Add Subject</button>
+          </div>
+          
+          <div class="subjects-container">
+            <div class="subjects-header">
+              <h3>Subjects for this Class</h3>
+            </div>
+            <div id="subjectsBody" class="subjects-body">
+              <!-- dynamic subject sections -->
+            </div>
+          </div>
+          
+          <div class="generation-options">
+            <h3>Generate Hall Tickets</h3>
+            <div class="generate-buttons">
+              <button id="showStudents" class="btn secondary">Individual Student Tickets</button>
+              <button id="generateFullClass" class="btn primary">Full Class Tickets</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      
       <section id="studentsSection">
         <h2>Students</h2>
         <div id="studentsGrid" class="grid"></div>
         <div id="studentsEmpty" class="empty-state hidden">No students found for this class.</div>
+        <button id="backToSubjects" class="btn hidden">Back to Subject Design</button>
       </section>
     </main>
 
@@ -38,8 +66,6 @@
         <button id="closeOverlay" class="close-btn" aria-label="Close">×</button>
 
         <div id="ticketActions" class="ticket-actions">
-          <input id="examName" type="text" placeholder="Exam name (optional)" />
-          <button id="addSubjectRow" class="btn">Add subject row</button>
           <button id="printTicket" class="btn primary">Print</button>
           <button id="downloadPdf" class="btn">Download PDF</button>
         </div>

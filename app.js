@@ -169,6 +169,27 @@ function setStudentModeUI() {
   el('#addSubjectRow').style.display = 'block';
 }
 
+async function showSubjectDesignSection(classData) {
+  // Update class name display
+  const classLabel = [classData.class_name, classData.section].filter(Boolean).join(' - ');
+  el('#selectedClassName').textContent = `${classLabel} - Subject Design`;
+  
+  // Fetch subjects suggestions for current class
+  cachedSubjects = await fetchSubjectsByClass(classData.id);
+  renderSubjectsDatalist(cachedSubjects);
+  
+  // Clear previous subjects and add one default row
+  clearSubjectsRows();
+  addSubjectRow();
+  
+  // Show subject design section, hide students section
+  el('#subjectDesignSection').classList.remove('hidden');
+  el('#studentsSection').classList.add('hidden');
+  
+  // Clear exam name
+  el('#examName').value = '';
+}
+
 async function startHallTicketDesign(classData) {
   isDesignMode = true;
   const classLabel = [classData.class_name, classData.section].filter(Boolean).join(' - ');
@@ -202,6 +223,107 @@ async function startHallTicketDesign(classData) {
   // Set UI to design mode
   setDesignModeUI();
   openOverlay();
+}
+
+async function showStudentsForIndividualTickets() {
+  if (!selectedClass) return;
+  
+  // Load and display students for individual ticket selection
+  const students = await fetchStudentsByClass(selectedClass.id);
+  renderStudentsGrid(students);
+  
+  // Show students section, hide subject design
+  el('#subjectDesignSection').classList.add('hidden');
+  el('#studentsSection').classList.remove('hidden');
+  el('#backToSubjects').classList.remove('hidden');
+}
+
+async function generateFullClassTickets() {
+  if (!selectedClass) return;
+  
+  const examName = el('#examName').value.trim();
+  if (!examName) {
+    alert('Please enter an exam name before generating tickets');
+    return;
+  }
+  
+  // Check if subjects are added
+  const subjectRows = document.querySelectorAll('#subjectsBody .subject-section');
+  if (subjectRows.length === 0) {
+    alert('Please add at least one subject before generating tickets');
+    return;
+  }
+  
+  // Get all students in the class
+  const students = await fetchStudentsByClass(selectedClass.id);
+  if (students.length === 0) {
+    alert('No students found in this class');
+    return;
+  }
+  
+  // Generate PDF with all student tickets
+  await generateBulkTicketsPDF(students);
+}
+
+async function generateBulkTicketsPDF(students) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('p', 'pt', 'a4');
+  
+  const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
+  const examName = el('#examName').value.trim();
+  
+  let isFirstPage = true;
+  
+  for (let i = 0; i < students.length; i++) {
+    const student = students[i];
+    
+    if (!isFirstPage) {
+      pdf.addPage();
+    }
+    isFirstPage = false;
+    
+    // Populate ticket for this student
+    await populateTicketForPDF(student, classLabel, examName);
+    
+    // Capture the ticket as image
+    const ticketEl = el('#originalTicket');
+    const canvas = await html2canvas(ticketEl, { scale: 2 });
+    const imgData = canvas.toDataURL('image/png');
+    
+    // Add to PDF
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - 40; // 20pt margin on each side
+    const imgHeight = canvas.height * (imgWidth / canvas.width);
+    
+    pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, Math.min(imgHeight, pageHeight - 40));
+  }
+  
+  // Save PDF
+  const className = [selectedClass.class_name, selectedClass.section].filter(Boolean).join('_');
+  pdf.save(`${className}_all_hall_tickets.pdf`);
+}
+
+async function populateTicketForPDF(student, classLabel, examName) {
+  // Set school header
+  const details = await fetchSchoolDetails();
+  setSchoolHeaderOnTicket(details);
+  
+  // Populate student info
+  populateTicketStudentInfo(student, classLabel, examName);
+  
+  // Fetch father name and photo
+  const [fatherName, photoUrl] = await Promise.all([
+    fetchFatherName(student.id),
+    fetchStudentPhotoUrl(student.id)
+  ]);
+  const fEl = el('#tFatherName'); if (fEl) fEl.textContent = fatherName || '-';
+  const pEl = el('#tPhoto'); if (pEl) { if (photoUrl) pEl.src = photoUrl; else pEl.removeAttribute('src'); }
+  
+  updateSubjectsPrinted();
+  
+  // Wait a bit for images to load
+  await new Promise(resolve => setTimeout(resolve, 100));
 }
 
 function setSchoolHeaderOnPage(details) {
@@ -465,15 +587,22 @@ async function init() {
       const classId = e.target.value;
       selectedClass = classes.find(c => c.id === classId) || null;
       if (!classId) {
-        renderStudentsGrid([]);
+        // Hide subject design section and students
+        el('#subjectDesignSection').classList.add('hidden');
+        el('#studentsSection').classList.add('hidden');
         return;
       }
-      // When class is selected, directly open the hall ticket design popup
-      await startHallTicketDesign(selectedClass);
+      // Show subject design section
+      await showSubjectDesignSection(selectedClass);
     });
 
     el('#addSubjectRow').addEventListener('click', () => addSubjectRow());
     el('#addSubjectRowFloat').addEventListener('click', () => addSubjectRow());
+    el('#showStudents').addEventListener('click', showStudentsForIndividualTickets);
+    el('#generateFullClass').addEventListener('click', generateFullClassTickets);
+    el('#backToSubjects').addEventListener('click', () => {
+      if (selectedClass) showSubjectDesignSection(selectedClass);
+    });
     el('#closeOverlay').addEventListener('click', closeOverlay);
     el('#printTicket').addEventListener('click', printTicket);
     el('#downloadPdf').addEventListener('click', downloadTicketAsPdf);
