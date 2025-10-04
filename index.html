@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hall Ticket Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="school-brand">
+        <img id="schoolLogo" alt="School Logo" class="school-logo" />
+        <div>
+          <h1 id="schoolName">School Name</h1>
+          <p id="schoolAddress" class="muted">Address</p>
+        </div>
+      </div>
+      <div class="controls">
+        <label for="classSelect">Select Class</label>
+        <select id="classSelect">
+          <option value="">-- Choose a class --</option>
+        </select>
+      </div>
+    </header>
+
+    <main>
+      <section id="studentsSection">
+        <h2>Students</h2>
+        <div id="studentsGrid" class="grid"></div>
+        <div id="studentsEmpty" class="empty-state hidden">No students found for this class.</div>
+      </section>
+    </main>
+
+    <div id="ticketOverlay" class="overlay hidden" aria-hidden="true">
+      <div class="overlay-content">
+        <button id="closeOverlay" class="close-btn" aria-label="Close">×</button>
+
+        <div id="ticketActions" class="ticket-actions">
+          <input id="examName" type="text" placeholder="Exam name (optional)" />
+          <button id="addSubjectRow" class="btn">Add subject row</button>
+          <button id="designComplete" class="btn primary hidden">Design Complete - Show Students</button>
+          <button id="printTicket" class="btn primary hidden">Print</button>
+          <button id="downloadPdf" class="btn hidden">Download PDF</button>
+        </div>
+
+        <div id="ticketArea" class="ticket A4 portrait">
+          <div class="ticket-header">
+            <div class="ticket-brand">
+              <img id="tSchoolLogo" class="ticket-logo" alt="School Logo" />
+              <div class="ticket-school-text">
+                <div id="tSchoolName" class="ticket-school-name">School Name</div>
+                <div id="tSchoolAddress" class="ticket-school-address">Address line</div>
+              </div>
+            </div>
+            <div class="ticket-title">Hall Ticket</div>
+          </div>
+
+          <div class="student-info">
+            <div><strong>Student Name:</strong> <span id="tStudentName">-</span></div>
+            <div><strong>Admission No:</strong> <span id="tAdmissionNo">-</span></div>
+            <div><strong>Roll No:</strong> <span id="tRollNo">-</span></div>
+            <div><strong>Class & Section:</strong> <span id="tClass">-</span></div>
+            <div><strong>Exam:</strong> <span id="tExam">-</span></div>
+          </div>
+
+          <table class="subjects-table">
+            <thead>
+              <tr>
+                <th style="width: 48px;">S.No</th>
+                <th>Subject</th>
+                <th style="width: 160px;">Date</th>
+                <th style="width: 160px;">Duration</th>
+              </tr>
+            </thead>
+            <tbody id="subjectsBody">
+              <!-- dynamic rows -->
+            </tbody>
+          </table>
+
+          <div class="signatures">
+            <div class="signature">
+              <div class="sig-line"></div>
+              <div class="sig-label">Signature of Principal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
