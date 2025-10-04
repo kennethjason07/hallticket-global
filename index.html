@@ -21,6 +21,7 @@
         <select id="classSelect">
           <option value="">-- Choose a class --</option>
         </select>
+        <button id="backToDesign" class="btn hidden" type="button" title="Back to Hall Ticket Design">Back</button>
       </div>
     </header>
 
@@ -39,51 +40,79 @@
         <div id="ticketActions" class="ticket-actions">
           <input id="examName" type="text" placeholder="Exam name (optional)" />
           <button id="addSubjectRow" class="btn">Add subject row</button>
-          <button id="designComplete" class="btn primary hidden">Design Complete - Show Students</button>
-          <button id="printTicket" class="btn primary hidden">Print</button>
-          <button id="downloadPdf" class="btn hidden">Download PDF</button>
+          <button id="printTicket" class="btn primary">Print</button>
+          <button id="downloadPdf" class="btn">Download PDF</button>
         </div>
 
-        <div id="ticketArea" class="ticket A4 portrait">
-          <div class="ticket-header">
-            <div class="ticket-brand">
-              <img id="tSchoolLogo" class="ticket-logo" alt="School Logo" />
-              <div class="ticket-school-text">
-                <div id="tSchoolName" class="ticket-school-name">School Name</div>
-                <div id="tSchoolAddress" class="ticket-school-address">Address line</div>
+        <div class="ticket-wrapper">
+        <div id="ticketArea" class="ticket classic">
+          <!-- Original Single Ticket (Default) -->
+          <div class="classic-page" id="originalTicket">
+            <div class="classic-border-outer">
+              <div class="classic-border-inner">
+                <div class="classic-header">
+                  <img id="tSchoolLogo" class="classic-logo" alt="School Logo" />
+                  <div class="classic-school-title">
+                    <div id="tSchoolName" class="classic-school-name">School Name</div>
+                  </div>
+                </div>
+
+                <div class="classic-toprow">
+                  <div><span class="label">1. ROLL NUMBER:</span> <span id="tRollNo">-</span></div>
+                  <div><span class="label">ADMISSION NO:</span> <span id="tAdmissionNo">-</span></div>
+                  <div><span class="label">Date:</span> <span id="tDate">-</span></div>
+                </div>
+
+                <div class="classic-main">
+                  <div class="classic-left">
+                    <div class="classic-line"><span class="label">2. NAME OF THE CANDIDATE:</span> <span id="tStudentName">-</span></div>
+                    <div class="classic-line"><span class="label">3. FATHER NAME:</span> <span id="tFatherName">-</span></div>
+                    <div class="classic-line small"><span class="label">Type:</span> <span id="tExam">-</span> <span class="gap"></span><span class="label">Sem:</span> <span id="tSem">-</span> <span class="gap"></span><span class="label">Session:</span> <span id="tSession">-</span></div>
+                    <div class="classic-subjects-title"><span>3. SUBJECTS APPLIED:</span></div>
+                    <table id="tSubjectsTable" class="classic-table">
+                      <thead>
+                        <tr>
+                          <th>DATE</th>
+                          <th>TIME</th>
+                          <th>SUBJECT NAME</th>
+                        </tr>
+                      </thead>
+                      <tbody id="tSubjectsTableBody">
+                        <tr><td colspan="3" class="empty">No subjects registered</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="classic-photo">
+                    <img id="tPhoto" alt="Photo" />
+                  </div>
+                </div>
+
+                <div class="classic-signatures one">
+                  <div class="sig-item"><div class="line"></div><div class="text">Signature of Principal</div></div>
+                </div>
+
+                <div class="classic-notes">
+                  <div class="note">Note: Please verify the eligibility of candidate before issuing the admission ticket.</div>
+                  <div class="note">This is Electronically Generated Admission Ticket</div>
+                  <div class="note center small">Note: This hall ticket must be preserved until the end of the examination</div>
+                </div>
+
               </div>
             </div>
-            <div class="ticket-title">Hall Ticket</div>
           </div>
 
-          <div class="student-info">
-            <div><strong>Student Name:</strong> <span id="tStudentName">-</span></div>
-            <div><strong>Admission No:</strong> <span id="tAdmissionNo">-</span></div>
-            <div><strong>Roll No:</strong> <span id="tRollNo">-</span></div>
-            <div><strong>Class & Section:</strong> <span id="tClass">-</span></div>
-            <div><strong>Exam:</strong> <span id="tExam">-</span></div>
-          </div>
 
-          <table class="subjects-table">
-            <thead>
-              <tr>
-                <th style="width: 48px;">S.No</th>
-                <th>Subject</th>
-                <th style="width: 160px;">Date</th>
-                <th style="width: 160px;">Duration</th>
-              </tr>
-            </thead>
-            <tbody id="subjectsBody">
-              <!-- dynamic rows -->
-            </tbody>
-          </table>
-
-          <div class="signatures">
-            <div class="signature">
-              <div class="sig-line"></div>
-              <div class="sig-label">Signature of Principal</div>
+          <!-- Keep the subject editor below the printable page; hidden in PDF -->
+          <div class="subjects-container">
+            <div class="subjects-header">
+              <h3>Subjects</h3>
+              <button id="addSubjectRowFloat" class="btn-float">+ Add Subject</button>
+            </div>
+            <div id="subjectsBody" class="subjects-body">
+              <!-- dynamic subject sections -->
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

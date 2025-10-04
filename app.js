@@ -138,6 +138,7 @@ function renderStudentsGrid(students) {
   }
 }
 
+
 function openOverlay() {
   const ov = el('#ticketOverlay');
   ov.classList.remove('hidden');
@@ -151,17 +152,21 @@ function closeOverlay() {
 }
 
 function setDesignModeUI() {
-  // Show design completion button, hide print/download buttons
-  el('#designComplete').classList.remove('hidden');
-  el('#printTicket').classList.add('hidden');
-  el('#downloadPdf').classList.add('hidden');
+  // Show print/download buttons for design mode
+  el('#printTicket').classList.remove('hidden');
+  el('#downloadPdf').classList.remove('hidden');
+  // Hide back button while designing
+  const backBtn = el('#backToDesign');
+  if (backBtn) backBtn.classList.add('hidden');
 }
 
 function setStudentModeUI() {
-  // Hide design completion button, show print/download buttons
-  el('#designComplete').classList.add('hidden');
+  // Show print/download buttons
   el('#printTicket').classList.remove('hidden');
   el('#downloadPdf').classList.remove('hidden');
+  // Keep exam name input and add subject buttons visible
+  el('#examName').style.display = 'block';
+  el('#addSubjectRow').style.display = 'block';
 }
 
 async function startHallTicketDesign(classData) {
@@ -181,12 +186,18 @@ async function startHallTicketDesign(classData) {
   el('#tStudentName').textContent = 'Student Name';
   el('#tAdmissionNo').textContent = 'Admission No';
   el('#tRollNo').textContent = 'Roll No';
-  el('#tClass').textContent = classLabel || '-';
+  const tClass = el('#tClass'); if (tClass) tClass.textContent = classLabel || '-';
   el('#tExam').textContent = examName || 'Exam Name';
+  const today = new Date();
+  const tDate = el('#tDate'); if (tDate) tDate.textContent = formatDate(today);
+  const tSem = el('#tSem'); if (tSem) tSem.textContent = '-';
+  const tSession = el('#tSession'); if (tSession) tSession.textContent = `${today.toLocaleString(undefined, { month: 'long' })} ${today.getFullYear()}`;
+  const tFatherName = el('#tFatherName'); if (tFatherName) tFatherName.textContent = 'Father Name';
 
   // Reset subject rows with one default row
   clearSubjectsRows();
   addSubjectRow();
+  updateSubjectsPrinted();
 
   // Set UI to design mode
   setDesignModeUI();
@@ -212,7 +223,7 @@ function setSchoolHeaderOnTicket(details) {
   if (details) {
     tName.textContent = details.name || 'School Name';
     const address = [details.address, details.city, details.state, details.pincode].filter(Boolean).join(', ');
-    tAddr.textContent = address || '-';
+    if (tAddr) tAddr.textContent = address || '-';
     if (details.logo_url) tLogo.src = details.logo_url; else tLogo.removeAttribute('src');
   }
 }
@@ -222,24 +233,41 @@ function clearSubjectsRows() {
 }
 
 function addSubjectRow(prefillName = '') {
-  const tbody = el('#subjectsBody');
-  const rowIndex = tbody.children.length + 1;
+  const subjectsBody = el('#subjectsBody');
+  const subjectNumber = subjectsBody.children.length + 1;
 
-  const tr = document.createElement('tr');
-  tr.className = 'subject-row';
-  tr.innerHTML = `
-    <td>${rowIndex}</td>
-    <td>
-      <input class="subject-input" type="text" list="subjectsList" placeholder="Subject name" value="${escapeHtml(prefillName)}" />
-    </td>
-    <td>
-      <input class="subject-input" type="date" />
-    </td>
-    <td>
-      <input class="subject-input" type="time" step="60" placeholder="HH:MM" />
-    </td>
+  const subjectSection = document.createElement('div');
+  subjectSection.className = 'subject-section';
+  subjectSection.innerHTML = `
+    <div class="subject-header">
+      <h4>Subject ${subjectNumber}</h4>
+    </div>
+    <div class="subject-fields">
+      <div class="field-group">
+        <label>Subject Name:</label>
+        <input class="subject-input" type="text" list="subjectsList" placeholder="Subject name" value="${escapeHtml(prefillName)}" />
+      </div>
+      <div class="field-group">
+        <label>Date:</label>
+        <input class="subject-input" type="date" />
+      </div>
+      <div class="field-group time-range">
+        <label>Time:</label>
+        <div class="time-inputs">
+          <input class="subject-input time-input" type="time" placeholder="From" title="Start time" />
+          <span class="time-separator">to</span>
+          <input class="subject-input time-input" type="time" placeholder="To" title="End time" />
+        </div>
+      </div>
+    </div>
   `;
-  tbody.appendChild(tr);
+  subjectsBody.appendChild(subjectSection);
+  // Update printed list when any input changes
+  subjectSection.querySelectorAll('.subject-input').forEach(inp => {
+    inp.addEventListener('input', updateSubjectsPrinted);
+  });
+  updateSubjectsPrinted();
+  return subjectSection;
 }
 
 function renderSubjectsDatalist(subjects) {
@@ -253,48 +281,117 @@ function renderSubjectsDatalist(subjects) {
   dl.innerHTML = subjects.map(s => `<option value="${escapeHtml(s.name)}"></option>`).join('');
 }
 
+function formatDate(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+async function fetchFatherName(studentId) {
+  try {
+    const { data } = await supabaseClient
+      .from('parents')
+      .select('name')
+      .eq('tenant_id', TENANT_ID)
+      .eq('student_id', studentId)
+      .eq('relation', 'Father')
+      .maybeSingle();
+    return data?.name || '-';
+  } catch (_) {
+    return '-';
+  }
+}
+
+async function fetchStudentPhotoUrl(studentId) {
+  try {
+    const { data } = await supabaseClient
+      .from('users')
+      .select('profile_url')
+      .eq('tenant_id', TENANT_ID)
+      .eq('linked_student_id', studentId)
+      .maybeSingle();
+    return data?.profile_url || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function updateSubjectsPrinted() {
+  const tbody = el('#tSubjectsTableBody');
+  if (!tbody) return;
+  const rows = Array.from(document.querySelectorAll('#subjectsBody .subject-section'));
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="empty">No subjects registered</td></tr>';
+    return;
+  }
+  const fmtDate = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth()+1).padStart(2, '0');
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${dd}/${mm}/${yy}`;
+  };
+  const html = rows.map((row) => {
+    const vals = Array.from(row.querySelectorAll('.subject-fields .subject-input'));
+    const name = vals[0]?.value?.trim() || '';
+    const date = fmtDate(vals[1]?.value || '');
+    const from = vals[2]?.value || '';
+    const to = vals[3]?.value || '';
+    const time = from && to ? `${from} - ${to}` : (from || to);
+    return `<tr><td>${escapeHtml(date)}</td><td>${escapeHtml(time)}</td><td>${escapeHtml(name)}</td></tr>`;
+  }).join('');
+  tbody.innerHTML = html || '<tr><td colspan="3" class="empty">No subjects registered</td></tr>';
+}
+
 function populateTicketStudentInfo(student, classLabel, examName) {
   el('#tStudentName').textContent = student.name || '-';
   el('#tAdmissionNo').textContent = student.admission_no || '-';
   el('#tRollNo').textContent = (student.roll_no ?? '-');
-  el('#tClass').textContent = classLabel || '-';
+  const tClass = el('#tClass'); if (tClass) tClass.textContent = classLabel || '-';
   el('#tExam').textContent = examName || '-';
+  const today = new Date();
+  const tDate = el('#tDate'); if (tDate) tDate.textContent = formatDate(today);
+  const tSem = el('#tSem'); if (tSem) tSem.textContent = '-';
+  const tSession = el('#tSession'); if (tSession) tSession.textContent = `${today.toLocaleString(undefined, { month: 'long' })} ${today.getFullYear()}`;
+  updateSubjectsPrinted();
 }
+
 
 async function handleStudentClick(student) {
   selectedStudent = student;
+  
   const classSel = el('#classSelect');
   const classLabel = classSel.options[classSel.selectedIndex]?.text || '';
-  const examName = el('#examName').value.trim();
+  const examName = el('#examName').value.trim() || 'Examination';
 
-  // Set school header in the ticket area (in case changed)
+  // Set school header in the ticket area
   const details = await fetchSchoolDetails();
   setSchoolHeaderOnTicket(details);
 
-  // Populate student header area
+  // Populate student info
   populateTicketStudentInfo(student, classLabel, examName);
 
-  // Keep existing subject rows from design phase
-  // Only add a row if none exist
+  // Fetch father name and photo if available
+  const [fatherName, photoUrl] = await Promise.all([
+    fetchFatherName(student.id),
+    fetchStudentPhotoUrl(student.id)
+  ]);
+  const fEl = el('#tFatherName'); if (fEl) fEl.textContent = fatherName || '-';
+  const pEl = el('#tPhoto'); if (pEl) { if (photoUrl) pEl.src = photoUrl; else pEl.removeAttribute('src'); }
+  
+  // Reset subject rows with one default row if none exist
   if (el('#subjectsBody').children.length === 0) {
     addSubjectRow();
   }
+  updateSubjectsPrinted();
 
   // Set UI to student mode
   setStudentModeUI();
   openOverlay();
 }
 
-async function handleDesignComplete() {
-  if (!selectedClass) return;
-  
-  // Close the design overlay
-  closeOverlay();
-  
-  // Load and display students for the selected class
-  const students = await fetchStudentsByClass(selectedClass.id);
-  renderStudentsGrid(students);
-}
 
 function getTicketHtmlForPdf() {
   // Return the element to render as PDF
@@ -304,6 +401,8 @@ function getTicketHtmlForPdf() {
 async function downloadTicketAsPdf() {
   const { jsPDF } = window.jspdf;
   const el = getTicketHtmlForPdf();
+  updateSubjectsPrinted();
+  el.classList.add('pdf-mode');
   const canvas = await html2canvas(el, { scale: 2 });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF('p', 'pt', 'a4');
@@ -321,12 +420,30 @@ async function downloadTicketAsPdf() {
   } else {
     pdf.addImage(imgData, 'PNG', 0, y, imgWidth, imgHeight);
   }
+  
+  // Generate filename
   const studentName = (selectedStudent?.name || 'ticket').replace(/[^a-z0-9_-]/gi, '_');
-  pdf.save(`${studentName}_hall_ticket.pdf`);
+  const filename = `${studentName}_hall_ticket.pdf`;
+  
+  pdf.save(filename);
+  el.classList.remove('pdf-mode');
 }
 
 function printTicket() {
   window.print();
+}
+
+function focusNextSubjectInput(currentEl) {
+  const allInputs = Array.from(document.querySelectorAll('#subjectsBody .subject-input'));
+  const idx = allInputs.indexOf(currentEl);
+  if (idx === -1) return;
+  if (idx < allInputs.length - 1) {
+    allInputs[idx + 1].focus();
+  } else {
+    const newSection = addSubjectRow();
+    const first = newSection ? newSection.querySelector('.subject-input') : null;
+    if (first) first.focus();
+  }
 }
 
 async function init() {
@@ -351,15 +468,35 @@ async function init() {
         renderStudentsGrid([]);
         return;
       }
-      // Start hall ticket design phase instead of immediately showing students
+      // When class is selected, directly open the hall ticket design popup
       await startHallTicketDesign(selectedClass);
     });
 
     el('#addSubjectRow').addEventListener('click', () => addSubjectRow());
-    el('#designComplete').addEventListener('click', handleDesignComplete);
+    el('#addSubjectRowFloat').addEventListener('click', () => addSubjectRow());
     el('#closeOverlay').addEventListener('click', closeOverlay);
     el('#printTicket').addEventListener('click', printTicket);
     el('#downloadPdf').addEventListener('click', downloadTicketAsPdf);
+    el('#subjectsBody').addEventListener('input', () => updateSubjectsPrinted());
+
+    // Back button: return to hall ticket design overlay
+    const backBtn = el('#backToDesign');
+    if (backBtn) {
+      backBtn.addEventListener('click', async () => {
+        if (!selectedClass) return;
+        isDesignMode = true;
+        setDesignModeUI();
+        openOverlay();
+      });
+    }
+
+    // Keyboard navigation: Enter moves to next subject input; at the end, add a new row
+    el('#subjectsBody').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('subject-input')) {
+        e.preventDefault();
+        focusNextSubjectInput(e.target);
+      }
+    });
   } catch (err) {
     alert(err.message || String(err));
   }
