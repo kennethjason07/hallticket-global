@@ -435,6 +435,17 @@ function setSchoolHeaderOnTicket(details) {
     if (tAddr) tAddr.textContent = address || '-';
     if (details.logo_url) tLogo.src = details.logo_url; else tLogo.removeAttribute('src');
   }
+  // Set centered watermark image to school logo (or hide if none)
+  const wm = el('#ticketWatermark');
+  if (wm) {
+    if (details && details.logo_url) {
+      wm.src = details.logo_url;
+      wm.style.display = '';
+    } else {
+      wm.removeAttribute('src');
+      wm.style.display = 'none';
+    }
+  }
 }
 
 function clearSubjectsRows() {

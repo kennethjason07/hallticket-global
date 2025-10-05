@@ -174,6 +174,21 @@ h2 { margin: 12px 0 16px; }
 /* Classic ticket wrapper spacing */
 .ticket.classic { padding: 12px; display: flex; flex-direction: column; gap: 20px; }
 
+/* Watermark styling */
+.ticket-watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 70%;
+  width: 70%;
+  height: auto;
+  opacity: 0.08;
+  filter: grayscale(100%);
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Dual ticket layout */
 .ticket.classic.dual-mode { 
   flex-direction: row; 
@@ -197,7 +212,7 @@ h2 { margin: 12px 0 16px; }
 
 .classic-page { background: #fff; }
 .classic-border-outer { border: 4px solid #111; padding: 6px; }
-.classic-border-inner { border: 2px solid #111; padding: 12px 12px 16px; min-height: 700px; }
+.classic-border-inner { position: relative; border: 2px solid #111; padding: 12px 12px 16px; min-height: 700px; }
 .classic-header { display: grid; grid-template-columns: 100px 1fr; align-items: center; }
 .classic-logo { width: 70px; height: 70px; object-fit: contain; border: 1px solid #888; background: #fafafa; }
 .classic-school-title { text-align: center; }
