@@ -639,36 +639,48 @@ async function downloadTicketAsPdf() {
 
   // If we are in bulk preview mode, use the prepared images and export two per page
   if (isBulkMode && bulkPreviewImages.length) {
-    const pdf = new jsPDF('p', 'pt', 'a4');
+    // Use landscape to allow full-width tickets while fitting two vertically
+    const pdf = new jsPDF('l', 'pt', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 10;
-    const gap = 10;
+    const margin = 6;
+    const gap = 8;
 
-    let firstPage = true;
-    for (let i = 0; i < bulkPreviewImages.length; i += 2) {
-      const first = bulkPreviewImages[i];
-      const second = bulkPreviewImages[i + 1];
-      if (!firstPage) pdf.addPage();
-      firstPage = false;
+    // Layout 6 tickets per page in a 3x2 grid (landscape)
+    const cols = 3;
+    const rows = 2;
+    for (let pageStart = 0; pageStart < bulkPreviewImages.length; pageStart += cols * rows) {
+      if (pageStart !== 0) pdf.addPage();
 
-      const fullWidth = pageWidth - margin * 2;
-      const firstHeight = first.height * (fullWidth / first.width);
-      const avail = pageHeight - margin * 2 - gap;
+      // Gather up to 6 images for this page; if fewer remain, duplicate to fill 6
+      const pageImgs = bulkPreviewImages.slice(pageStart, pageStart + cols * rows);
+      if (pageImgs.length < cols * rows && pageImgs.length > 0) {
+        const need = cols * rows - pageImgs.length;
+        for (let k = 0; k < need; k++) {
+          pageImgs.push(pageImgs[k % pageImgs.length]);
+        }
+      }
 
-      // Place first at full width
-      pdf.addImage(first.url, 'PNG', margin, margin, fullWidth, firstHeight);
+      // Compute cell size to fit 3 columns and 2 rows while preserving aspect ratio
+      const contentWidth = pageWidth - margin * 2 - (cols - 1) * gap;
+      const contentHeight = pageHeight - margin * 2 - (rows - 1) * gap;
 
-      if (second) {
-        const secondHeight = second.height * (fullWidth / second.width);
-        const totalH = firstHeight + gap + secondHeight;
-        if (totalH <= (pageHeight - margin * 2)) {
-          // Both fit vertically at full width
-          pdf.addImage(second.url, 'PNG', margin, margin + firstHeight + gap, fullWidth, secondHeight);
-        } else {
-          // Second does not fit on this page at full width -> new page, still full width
-          pdf.addPage();
-          pdf.addImage(second.url, 'PNG', margin, margin, fullWidth, secondHeight);
+      // Use aspect ratio from the first image on this page
+      const ratio = pageImgs[0].height / pageImgs[0].width;
+
+      // Cell width limited by available width per column and height per row
+      const maxCellWidthByCols = contentWidth / cols;
+      const maxCellWidthByRows = contentHeight / (rows * ratio);
+      const cellWidth = Math.min(maxCellWidthByCols, maxCellWidthByRows);
+      const cellHeight = cellWidth * ratio;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const idxInPage = r * cols + c;
+          const img = pageImgs[idxInPage];
+          const x = margin + c * (cellWidth + gap);
+          const y = margin + r * (cellHeight + gap);
+          pdf.addImage(img.url, 'PNG', x, y, cellWidth, cellHeight);
         }
       }
     }
@@ -679,10 +691,10 @@ async function downloadTicketAsPdf() {
   }
 
   // Single-ticket fallback (original behaviour)
-  const el = getTicketHtmlForPdf();
+  const ticketEl = getTicketHtmlForPdf();
   updateSubjectsPrinted();
-  el.classList.add('pdf-mode');
-  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' });
+  ticketEl.classList.add('pdf-mode');
+  const canvas = await html2canvas(ticketEl, { scale: 2, backgroundColor: '#ffffff' });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF('p', 'pt', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -691,6 +703,8 @@ async function downloadTicketAsPdf() {
   const margin = 10;
   let targetWidth = pageWidth - margin * 2;
   let targetHeight = canvas.height * (targetWidth / canvas.width);
+
+
   const availableHeight = pageHeight - margin * 2;
   if (targetHeight > availableHeight) {
     const ratio = availableHeight / targetHeight;
@@ -702,7 +716,7 @@ async function downloadTicketAsPdf() {
   const studentName = (selectedStudent?.name || 'ticket').replace(/[^a-z0-9_-]/gi, '_');
   const filename = `${studentName}_hall_ticket.pdf`;
   pdf.save(filename);
-  el.classList.remove('pdf-mode');
+  ticketEl.classList.remove('pdf-mode');
 }
 
 function printTicket() {
