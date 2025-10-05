@@ -204,6 +204,8 @@ h2 { margin: 12px 0 16px; }
 .classic-school-name { font-weight: 700; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px; }
 .classic-department { font-weight: 600; font-size: 12px; color: #333; margin-top: 2px; }
 .classic-exam-title { font-weight: 600; font-size: 12px; color: #333; margin-top: 2px; }
+.classic-school-address { font-size: 12px; color: #333; margin-top: 2px; }
+.classic-separator { border: none; border-top: 2px solid #111; margin: 8px 0 12px; }
 
 .classic-toprow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 8px; padding: 8px 0; border-top: 1px solid #111; border-bottom: 1px solid #111; }
 .classic-toprow .label { font-weight: 700; }
