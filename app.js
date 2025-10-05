@@ -218,10 +218,10 @@ async function startHallTicketDesign(classData) {
 
   // Populate template student info for design
   el('#tStudentName').textContent = 'Student Name';
-  el('#tAdmissionNo').textContent = 'Admission No';
-  el('#tRollNo').textContent = 'Roll No';
+  const tAdmissionNo = el('#tAdmissionNo'); if (tAdmissionNo) tAdmissionNo.textContent = 'Admission No';
+  const tRollNo = el('#tRollNo'); if (tRollNo) tRollNo.textContent = 'Roll No';
   const tClass = el('#tClass'); if (tClass) tClass.textContent = classLabel || '-';
-  el('#tExam').textContent = examName || 'Exam Name';
+  const tExamEl = el('#tExam'); if (tExamEl) tExamEl.textContent = examName || 'Exam Name';
   const today = new Date();
   const tDate = el('#tDate'); if (tDate) tDate.textContent = formatDate(today);
   const tSem = el('#tSem'); if (tSem) tSem.textContent = '-';
@@ -556,10 +556,10 @@ function updateSubjectsPrinted() {
 
 function populateTicketStudentInfo(student, classLabel, examName) {
   el('#tStudentName').textContent = student.name || '-';
-  el('#tAdmissionNo').textContent = student.admission_no || '-';
-  el('#tRollNo').textContent = (student.roll_no ?? '-');
+  const tAdmissionNo = el('#tAdmissionNo'); if (tAdmissionNo) tAdmissionNo.textContent = student.admission_no || '-';
+  const tRollNo = el('#tRollNo'); if (tRollNo) tRollNo.textContent = (student.roll_no ?? '-');
   const tClass = el('#tClass'); if (tClass) tClass.textContent = classLabel || '-';
-  el('#tExam').textContent = examName || '-';
+  const tExamEl = el('#tExam'); if (tExamEl) tExamEl.textContent = examName || '-';
   const today = new Date();
   const tDate = el('#tDate'); if (tDate) tDate.textContent = formatDate(today);
   const tSem = el('#tSem'); if (tSem) tSem.textContent = '-';
