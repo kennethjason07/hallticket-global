@@ -662,23 +662,26 @@ async function downloadTicketAsPdf() {
       }
 
       // Compute cell size to fit 3 columns and 2 rows while preserving aspect ratio
-      const contentWidth = pageWidth - margin * 2 - (cols - 1) * gap;
+      const contentWidth = pageWidth - margin * 2;
       const contentHeight = pageHeight - margin * 2 - (rows - 1) * gap;
 
       // Use aspect ratio from the first image on this page
       const ratio = pageImgs[0].height / pageImgs[0].width;
 
-      // Cell width limited by available width per column and height per row
-      const maxCellWidthByCols = contentWidth / cols;
+      // Base width per column; height per row may constrain width
+      const maxCellWidthByCols = (contentWidth - (cols - 1) * gap) / cols;
       const maxCellWidthByRows = contentHeight / (rows * ratio);
       const cellWidth = Math.min(maxCellWidthByCols, maxCellWidthByRows);
       const cellHeight = cellWidth * ratio;
+
+      // Distribute leftover width as horizontal gap so each row fills full width
+      const gapX = cols > 1 ? (contentWidth - cols * cellWidth) / (cols - 1) : 0;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const idxInPage = r * cols + c;
           const img = pageImgs[idxInPage];
-          const x = margin + c * (cellWidth + gap);
+          const x = margin + c * (cellWidth + gapX);
           const y = margin + r * (cellHeight + gap);
           pdf.addImage(img.url, 'PNG', x, y, cellWidth, cellHeight);
         }
