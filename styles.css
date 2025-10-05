@@ -203,7 +203,8 @@ h2 { margin: 12px 0 16px; }
 .classic-school-title { text-align: center; }
 .classic-school-name { font-weight: 700; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px; }
 .classic-department { font-weight: 600; font-size: 12px; color: #333; margin-top: 2px; }
-.classic-exam-title { font-weight: 600; font-size: 12px; color: #333; margin-top: 2px; }
+.classic-exam-title { font-weight: 700; font-size: 14px; color: #111; margin-top: 4px; text-align: center; }
+.classic-exam-title #tExam { text-transform: uppercase; font-weight: 800; }
 .classic-school-address { font-size: 12px; color: #333; margin-top: 2px; }
 .classic-separator { border: none; border-top: 2px solid #111; margin: 8px 0 12px; }
 
