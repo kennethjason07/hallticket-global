@@ -508,6 +508,20 @@ function formatDate(d) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function formatTime12h(hhmm) {
+  if (!hhmm) return '';
+  const parts = hhmm.split(':');
+  if (parts.length < 2) return hhmm;
+  let h = parseInt(parts[0], 10);
+  const m = parts[1] ?? '00';
+  if (Number.isNaN(h)) return hhmm;
+  const period = h >= 12 ? 'pm' : 'am';
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+
 async function fetchFatherName(studentId) {
   try {
     const { data } = await supabaseClient
@@ -559,7 +573,9 @@ function updateSubjectsPrinted() {
     const date = fmtDate(vals[1]?.value || '');
     const from = vals[2]?.value || '';
     const to = vals[3]?.value || '';
-    const time = from && to ? `${from} - ${to}` : (from || to);
+    const time = from && to 
+      ? `${formatTime12h(from)} - ${formatTime12h(to)}` 
+      : (from ? formatTime12h(from) : (to ? formatTime12h(to) : ''));
     return `<tr><td>${escapeHtml(date)}</td><td>${escapeHtml(time)}</td><td>${escapeHtml(name)}</td><td class="sig-cell"><div class="sigline"></div></td></tr>`;
   }).join('');
   tbody.innerHTML = html || '<tr><td colspan="4" class="empty">No subjects registered</td></tr>';
