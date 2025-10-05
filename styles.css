@@ -155,6 +155,14 @@ h2 { margin: 12px 0 16px; }
   border-radius: 0 0 12px 12px;
 }
 
+/* Bulk preview grid for Full Class Tickets */
+.bulk { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 16px; }
+.bulk .ticket-preview { width: 100%; height: auto; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.06); background:#fff; }
+.bulk .page-sep { height: 1px; background: #e5e7eb; margin: 6px 0 0; }
+
+/* Keep the single ticket in DOM for html2canvas while hiding it from view */
+.offscreen-capture { position: absolute !important; left: -10000px !important; top: -10000px !important; opacity: 0 !important; pointer-events: none !important; }
+
 .ticket { 
   background: #fff; 
   color: #111; 
@@ -227,8 +235,10 @@ h2 { margin: 12px 0 16px; }
 .classic-table td:nth-child(1), .classic-table td:nth-child(2) { text-align: center; white-space: nowrap; }
 .classic-table td:nth-child(3) { text-align: left; }
 .classic-table td:nth-child(4) { text-align: center; white-space: nowrap; }
-.classic-table td:nth-child(5) { text-align: center; width: 60px; }
 .classic-table .empty { text-align: center; color: #555; }
+/* Signature column inside table (examiner sign for each subject) */
+.classic-table .sig-cell { width: 140px; }
+.classic-table .sigline { border-bottom: 1px solid #111; height: 18px; margin: 0 6px; }
 
 /* signatures: only one (Principal) variant */
 .classic-signatures.one { grid-template-columns: 1fr; }

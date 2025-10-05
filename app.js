@@ -9,6 +9,9 @@ let cachedSubjects = [];
 let selectedClass = null;
 let selectedStudent = null;
 let isDesignMode = false; // Track if we're in hall ticket design mode or student selection mode
+// Bulk preview state
+let isBulkMode = false;
+let bulkPreviewImages = []; // array of {url, width, height}
 
 // Helpers
 function parseEnv(text) {
@@ -149,6 +152,16 @@ function closeOverlay() {
   ov.classList.add('hidden');
   ov.setAttribute('aria-hidden', 'true');
   isDesignMode = false;
+  // reset bulk preview visibility/state
+  const bulk = el('#bulkTicketsArea');
+  if (bulk) {
+    bulk.classList.add('hidden');
+    bulk.innerHTML = '';
+  }
+  const single = el('#ticketArea');
+  if (single) single.classList.remove('offscreen-capture');
+  isBulkMode = false;
+  bulkPreviewImages = [];
 }
 
 function setDesignModeUI() {
@@ -240,65 +253,139 @@ async function showStudentsForIndividualTickets() {
 
 async function generateFullClassTickets() {
   if (!selectedClass) return;
-  
+
+  // Allow empty exam name; fall back to default later
   const examName = el('#examName').value.trim();
   if (!examName) {
-    alert('Please enter an exam name before generating tickets');
-    return;
+    el('#examName').value = 'Examination';
   }
-  
-  // Check if subjects are added
-  const subjectRows = document.querySelectorAll('#subjectsBody .subject-section');
-  if (subjectRows.length === 0) {
-    alert('Please add at least one subject before generating tickets');
-    return;
-  }
-  
-  // Get all students in the class
+
+  // Load all students
   const students = await fetchStudentsByClass(selectedClass.id);
   if (students.length === 0) {
     alert('No students found in this class');
     return;
   }
-  
-  // Generate PDF with all student tickets
-  await generateBulkTicketsPDF(students);
+
+  // Prepare overlay and bulk preview area
+  openOverlay();
+  const bulk = el('#bulkTicketsArea');
+  const single = el('#ticketArea');
+  if (bulk && single) {
+    bulk.classList.remove('hidden');
+    // keep single ticket in DOM for html2canvas capture, but move it offscreen
+    single.classList.add('offscreen-capture');
+  }
+  isBulkMode = true;
+  bulkPreviewImages = [];
+  if (bulk) bulk.innerHTML = '';
+
+  const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
+  const nameForExam = el('#examName').value.trim();
+
+  // Render preview images for each student sequentially to avoid ID conflicts and heavy DOM cloning
+  for (let i = 0; i < students.length; i++) {
+    const student = students[i];
+    await populateTicketForPDF(student, classLabel, nameForExam);
+    const ticketEl = el('#originalTicket');
+    const canvas = await html2canvas(ticketEl, { scale: 1.6, useCORS: true, backgroundColor: '#ffffff' });
+    const url = canvas.toDataURL('image/png');
+    bulkPreviewImages.push({ url, width: canvas.width, height: canvas.height });
+    if (bulk) {
+      const img = document.createElement('img');
+      img.className = 'ticket-preview';
+      img.src = url;
+      img.alt = `Ticket ${i + 1}`;
+      bulk.appendChild(img);
+      if (i % 2 === 1) {
+        const sep = document.createElement('div');
+        sep.className = 'page-sep';
+        bulk.appendChild(sep);
+      }
+    }
+  }
 }
 
 async function generateBulkTicketsPDF(students) {
   const { jsPDF } = window.jspdf;
   const pdf = new jsPDF('p', 'pt', 'a4');
-  
+
   const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
   const examName = el('#examName').value.trim();
-  
+
+  // Ensure ticket is visible for html2canvas capture
+  const overlay = el('#ticketOverlay');
+  const wasHidden = overlay.classList.contains('hidden');
+  if (wasHidden) {
+    openOverlay();
+  }
+  const ticketArea = el('#ticketArea');
+  ticketArea.classList.add('pdf-mode');
+
   let isFirstPage = true;
-  
-  for (let i = 0; i < students.length; i++) {
-    const student = students[i];
-    
+
+  // Render two students per page
+  for (let i = 0; i < students.length; i += 2) {
+    const first = students[i];
+    const second = students[i + 1];
+
     if (!isFirstPage) {
       pdf.addPage();
     }
     isFirstPage = false;
-    
-    // Populate ticket for this student
-    await populateTicketForPDF(student, classLabel, examName);
-    
-    // Capture the ticket as image
-    const ticketEl = el('#originalTicket');
-    const canvas = await html2canvas(ticketEl, { scale: 2 });
-    const imgData = canvas.toDataURL('image/png');
-    
-    // Add to PDF
+
+    // Function to capture a student's ticket as canvas data URL
+    const renderStudent = async (stu) => {
+      await populateTicketForPDF(stu, classLabel, examName);
+      const ticketEl = el('#originalTicket');
+      const canvas = await html2canvas(ticketEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      return { canvas, dataUrl: canvas.toDataURL('image/png') };
+    };
+
+    // Render first student
+    const firstImg = await renderStudent(first);
+
+    // Compute target sizes to fit two vertically without overlap
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pageWidth - 40; // 20pt margin on each side
-    const imgHeight = canvas.height * (imgWidth / canvas.width);
-    
-    pdf.addImage(imgData, 'PNG', 20, 20, imgWidth, Math.min(imgHeight, pageHeight - 40));
+    const margin = 20; // 20pt margins
+    const gap = 10; // gap between two tickets
+
+    // Base size if we used full width
+    let targetWidth = pageWidth - margin * 2;
+    let targetHeight = firstImg.canvas.height * (targetWidth / firstImg.canvas.width);
+
+    // Scale if two won't fit vertically
+    const availableHeight = pageHeight - margin * 2 - gap;
+    const totalNeeded = targetHeight * 2;
+    if (totalNeeded > availableHeight) {
+      const ratio = availableHeight / totalNeeded;
+      targetWidth *= ratio;
+      targetHeight *= ratio;
+    }
+
+    // Add first image
+    pdf.addImage(firstImg.dataUrl, 'PNG', margin, margin, targetWidth, targetHeight);
+
+    // Render and add second image if exists
+    if (second) {
+      const secondImg = await renderStudent(second);
+      pdf.addImage(
+        secondImg.dataUrl,
+        'PNG',
+        margin,
+        margin + targetHeight + gap,
+        targetWidth,
+        targetHeight
+      );
+    }
   }
-  
+
+  ticketArea.classList.remove('pdf-mode');
+  if (wasHidden) {
+    closeOverlay();
+  }
+
   // Save PDF
   const className = [selectedClass.class_name, selectedClass.section].filter(Boolean).join('_');
   pdf.save(`${className}_all_hall_tickets.pdf`);
@@ -444,7 +531,7 @@ function updateSubjectsPrinted() {
   if (!tbody) return;
   const rows = Array.from(document.querySelectorAll('#subjectsBody .subject-section'));
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="3" class="empty">No subjects registered</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No subjects registered</td></tr>';
     return;
   }
   const fmtDate = (iso) => {
@@ -462,9 +549,9 @@ function updateSubjectsPrinted() {
     const from = vals[2]?.value || '';
     const to = vals[3]?.value || '';
     const time = from && to ? `${from} - ${to}` : (from || to);
-    return `<tr><td>${escapeHtml(date)}</td><td>${escapeHtml(time)}</td><td>${escapeHtml(name)}</td></tr>`;
+    return `<tr><td>${escapeHtml(date)}</td><td>${escapeHtml(time)}</td><td>${escapeHtml(name)}</td><td class="sig-cell"><div class="sigline"></div></td></tr>`;
   }).join('');
-  tbody.innerHTML = html || '<tr><td colspan="3" class="empty">No subjects registered</td></tr>';
+  tbody.innerHTML = html || '<tr><td colspan="4" class="empty">No subjects registered</td></tr>';
 }
 
 function populateTicketStudentInfo(student, classLabel, examName) {
@@ -522,6 +609,48 @@ function getTicketHtmlForPdf() {
 
 async function downloadTicketAsPdf() {
   const { jsPDF } = window.jspdf;
+
+  // If we are in bulk preview mode, use the prepared images and export two per page
+  if (isBulkMode && bulkPreviewImages.length) {
+    const pdf = new jsPDF('p', 'pt', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 20;
+    const gap = 10;
+
+    let firstPage = true;
+    for (let i = 0; i < bulkPreviewImages.length; i += 2) {
+      const first = bulkPreviewImages[i];
+      const second = bulkPreviewImages[i + 1];
+      if (!firstPage) pdf.addPage();
+      firstPage = false;
+
+      let targetWidth = pageWidth - margin * 2;
+      let targetHeight = first.height * (targetWidth / first.width);
+      const available = pageHeight - margin * 2 - gap;
+      const total = targetHeight * 2;
+      if (second && total > available) {
+        const ratio = available / total;
+        targetWidth *= ratio;
+        targetHeight *= ratio;
+      } else if (!second && targetHeight > (pageHeight - margin * 2)) {
+        const ratio = (pageHeight - margin * 2) / targetHeight;
+        targetWidth *= ratio;
+        targetHeight *= ratio;
+      }
+
+      pdf.addImage(first.url, 'PNG', margin, margin, targetWidth, targetHeight);
+      if (second) {
+        pdf.addImage(second.url, 'PNG', margin, margin + targetHeight + gap, targetWidth, targetHeight);
+      }
+    }
+
+    const className = [selectedClass?.class_name, selectedClass?.section].filter(Boolean).join('_') || 'class';
+    pdf.save(`${className}_all_hall_tickets.pdf`);
+    return;
+  }
+
+  // Single-ticket fallback (original behaviour)
   const el = getTicketHtmlForPdf();
   updateSubjectsPrinted();
   el.classList.add('pdf-mode');
@@ -531,22 +660,17 @@ async function downloadTicketAsPdf() {
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
 
-  // Fit image to page width
   const imgWidth = pageWidth;
   const imgHeight = canvas.height * (imgWidth / canvas.width);
-  let y = 0;
   if (imgHeight > pageHeight) {
-    // If content taller than page, scale to height instead
     const ratio = pageHeight / imgHeight;
     pdf.addImage(imgData, 'PNG', 0, 0, imgWidth * ratio, pageHeight);
   } else {
-    pdf.addImage(imgData, 'PNG', 0, y, imgWidth, imgHeight);
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
   }
-  
-  // Generate filename
+
   const studentName = (selectedStudent?.name || 'ticket').replace(/[^a-z0-9_-]/gi, '_');
   const filename = `${studentName}_hall_ticket.pdf`;
-  
   pdf.save(filename);
   el.classList.remove('pdf-mode');
 }
