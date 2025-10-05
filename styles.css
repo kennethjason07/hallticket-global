@@ -411,10 +411,18 @@ h2 { margin: 12px 0 16px; }
 
 /***** Print styles *****/
 @media print {
-  .ticket.classic .subjects-container { display: none !important; }
   body { background: #fff; }
+  /* Hide app chrome */
   .app-header, .ticket-actions, .close-btn { display: none !important; }
-  .overlay { position: static; background: transparent; padding: 0; }
-  .overlay .overlay-content { box-shadow: none; padding: 0; border: none; }
-  .ticket { border: none; border-radius: 0; padding: 0; }
+  /* Ensure overlay and ticket are printable */
+  .overlay { position: static !important; background: transparent !important; padding: 0 !important; display: block !important; }
+  .overlay .overlay-content { box-shadow: none !important; padding: 0 !important; border: none !important; }
+  /* Hide editors/other sections */
+  #subjectDesignSection, #studentsSection, #bulkTicketsArea { display: none !important; }
+  /* Hide subject editor under ticket */
+  .ticket.classic .subjects-container { display: none !important; }
+  /* Reset offscreen capture so the ticket is visible when printing */
+  .offscreen-capture { position: static !important; left: 0 !important; top: 0 !important; opacity: 1 !important; pointer-events: auto !important; }
+  /* Remove extra padding/borders for clean print */
+  .ticket { border: none !important; border-radius: 0 !important; padding: 0 !important; }
 }
