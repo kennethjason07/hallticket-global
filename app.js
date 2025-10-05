@@ -630,8 +630,8 @@ async function handleStudentClick(student) {
 
 
 function getTicketHtmlForPdf() {
-  // Return the element to render as PDF
-  return document.getElementById('ticketArea');
+  // Return the element to render as PDF (inner ticket only)
+  return document.getElementById('originalTicket');
 }
 
 async function downloadTicketAsPdf() {
@@ -642,7 +642,7 @@ async function downloadTicketAsPdf() {
     const pdf = new jsPDF('p', 'pt', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 20;
+    const margin = 10;
     const gap = 10;
 
     let firstPage = true;
@@ -652,23 +652,24 @@ async function downloadTicketAsPdf() {
       if (!firstPage) pdf.addPage();
       firstPage = false;
 
-      let targetWidth = pageWidth - margin * 2;
-      let targetHeight = first.height * (targetWidth / first.width);
-      const available = pageHeight - margin * 2 - gap;
-      const total = targetHeight * 2;
-      if (second && total > available) {
-        const ratio = available / total;
-        targetWidth *= ratio;
-        targetHeight *= ratio;
-      } else if (!second && targetHeight > (pageHeight - margin * 2)) {
-        const ratio = (pageHeight - margin * 2) / targetHeight;
-        targetWidth *= ratio;
-        targetHeight *= ratio;
-      }
+      const fullWidth = pageWidth - margin * 2;
+      const firstHeight = first.height * (fullWidth / first.width);
+      const avail = pageHeight - margin * 2 - gap;
 
-      pdf.addImage(first.url, 'PNG', margin, margin, targetWidth, targetHeight);
+      // Place first at full width
+      pdf.addImage(first.url, 'PNG', margin, margin, fullWidth, firstHeight);
+
       if (second) {
-        pdf.addImage(second.url, 'PNG', margin, margin + targetHeight + gap, targetWidth, targetHeight);
+        const secondHeight = second.height * (fullWidth / second.width);
+        const totalH = firstHeight + gap + secondHeight;
+        if (totalH <= (pageHeight - margin * 2)) {
+          // Both fit vertically at full width
+          pdf.addImage(second.url, 'PNG', margin, margin + firstHeight + gap, fullWidth, secondHeight);
+        } else {
+          // Second does not fit on this page at full width -> new page, still full width
+          pdf.addPage();
+          pdf.addImage(second.url, 'PNG', margin, margin, fullWidth, secondHeight);
+        }
       }
     }
 
@@ -681,20 +682,22 @@ async function downloadTicketAsPdf() {
   const el = getTicketHtmlForPdf();
   updateSubjectsPrinted();
   el.classList.add('pdf-mode');
-  const canvas = await html2canvas(el, { scale: 2 });
+  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff' });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF('p', 'pt', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
 
-  const imgWidth = pageWidth;
-  const imgHeight = canvas.height * (imgWidth / canvas.width);
-  if (imgHeight > pageHeight) {
-    const ratio = pageHeight / imgHeight;
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth * ratio, pageHeight);
-  } else {
-    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+  const margin = 10;
+  let targetWidth = pageWidth - margin * 2;
+  let targetHeight = canvas.height * (targetWidth / canvas.width);
+  const availableHeight = pageHeight - margin * 2;
+  if (targetHeight > availableHeight) {
+    const ratio = availableHeight / targetHeight;
+    targetWidth *= ratio;
+    targetHeight *= ratio;
   }
+  pdf.addImage(imgData, 'PNG', margin, margin, targetWidth, targetHeight);
 
   const studentName = (selectedStudent?.name || 'ticket').replace(/[^a-z0-9_-]/gi, '_');
   const filename = `${studentName}_hall_ticket.pdf`;
