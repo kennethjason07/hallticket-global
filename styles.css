@@ -279,10 +279,10 @@ h2 { margin: 12px 0 16px; }
 /* PDF: header colors */
 .ticket.classic.pdf-mode #tSchoolName { color: #1e40af; } /* Blue */
 .ticket.classic.pdf-mode .classic-exam-title { color: #dc2626; } /* Red */
-/* PDF: move principal signature to bottom-right */
+/* PDF: bottom-right principal signature */
 .ticket.classic.pdf-mode .classic-signatures.one { display: flex; justify-content: flex-end; }
 .ticket.classic.pdf-mode .classic-signatures .sig-item { text-align: right; }
-.ticket.classic.pdf-mode .classic-signatures.one .line { margin: 0 0 6px 0; width: 220px; }
+.ticket.classic.pdf-mode .classic-signatures.one .line { display: none; }
 
 /* On-screen: match PDF look */
 .ticket.classic #tSchoolName { color: #1e40af; }
