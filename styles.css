@@ -276,6 +276,13 @@ h2 { margin: 12px 0 16px; }
 .ticket.classic.pdf-mode .subjects-container { display: none; }
 /* PDF-specific adjustments */
 .ticket.classic.pdf-mode .classic-table .sigline { border-bottom: none; }
+/* PDF: header colors */
+.ticket.classic.pdf-mode #tSchoolName { color: #1e40af; } /* Blue */
+.ticket.classic.pdf-mode .classic-exam-title { color: #dc2626; } /* Red */
+/* PDF: move principal signature to bottom-right */
+.ticket.classic.pdf-mode .classic-signatures.one { display: flex; justify-content: flex-end; }
+.ticket.classic.pdf-mode .classic-signatures .sig-item { text-align: right; }
+.ticket.classic.pdf-mode .classic-signatures.one .line { margin: 0 0 6px 0; width: 220px; }
 
 /* Responsive adjustments for dual tickets */
 @media print {
