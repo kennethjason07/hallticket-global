@@ -13,6 +13,11 @@ let isDesignMode = false; // Track if we're in hall ticket design mode or studen
 let isBulkMode = false;
 let bulkPreviewImages = []; // array of {url, width, height}
 
+// Caches to speed up bulk exports
+let schoolDetailsCache = null;
+const fatherNameCache = new Map(); // studentId -> father name
+const photoUrlCache = new Map();   // studentId -> photo URL
+
 // Helpers
 function parseEnv(text) {
   const out = {};
@@ -61,6 +66,7 @@ function createSbClient(url, anon) {
 }
 
 async function fetchSchoolDetails() {
+  if (schoolDetailsCache) return schoolDetailsCache;
   const { data, error } = await supabaseClient
     .from('school_details')
     .select('name,address,city,state,pincode,logo_url,principal_name')
@@ -68,6 +74,7 @@ async function fetchSchoolDetails() {
     .limit(1)
     .maybeSingle();
   if (error) return null;
+  schoolDetailsCache = data;
   return data;
 }
 
@@ -314,6 +321,10 @@ async function generateBulkTicketsPDF(students) {
   const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
   const examName = el('#examName').value.trim();
 
+  // Prefetch and cache school + student meta to avoid per-student network calls
+  try { await fetchSchoolDetails(); } catch (_) {}
+  try { await prefetchStudentMeta(students); } catch (_) {}
+
   // Ensure ticket is visible for html2canvas capture
   const overlay = el('#ticketOverlay');
   const wasHidden = overlay.classList.contains('hidden');
@@ -338,7 +349,7 @@ async function generateBulkTicketsPDF(students) {
     const renderStudent = async (stu) => {
       await populateTicketForPDF(stu, classLabel, examName);
       const ticketEl = el('#originalTicket');
-      const canvas = await html2canvas(ticketEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+const canvas = await html2canvas(ticketEl, { scale: 1.3, useCORS: true, backgroundColor: '#ffffff' });
       return { canvas, dataUrl: canvas.toDataURL('image/png') };
     };
 
@@ -351,42 +362,31 @@ async function generateBulkTicketsPDF(students) {
 
     if (studentImages.length === 0) continue;
 
-    // Compute sizes for 2x2 grid
+    // Compute sizes for 2x2 grid with minimal margins and no gaps to reduce blank space
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
-    const gap = 5;
+    const margin = 5;
+    const gap = 0;
 
-    // Calculate cell dimensions with optimized spacing
-    const availableWidth = pageWidth - margin * 2 - gap;
-    const availableHeight = pageHeight - margin * 2 - gap;
-    const aspectRatio = studentImages[0].canvas.height / studentImages[0].canvas.width;
-    
-    // Try fitting by width first
-    let cellWidth = availableWidth / 2;
-    let cellHeight = cellWidth * aspectRatio;
-    
-    // If height doesn't fit, constrain by height
-    const maxCellHeight = availableHeight / 2;
-    if (cellHeight > maxCellHeight) {
-      cellHeight = maxCellHeight;
-      cellWidth = cellHeight / aspectRatio;
-    }
+    const cols = 2;
+    const rows = 2;
+    const contentWidth = pageWidth - margin * 2;
+    const contentHeight = pageHeight - margin * 2;
 
-    // Place images in 2x2 grid
+    const cellWidth = contentWidth / cols;
+    const cellHeight = contentHeight / rows;
+
+    // Place images to fill each cell (may slightly stretch to cover full page)
     const positions = [
-      { row: 0, col: 0 }, // top-left
-      { row: 0, col: 1 }, // top-right
-      { row: 1, col: 0 }, // bottom-left
-      { row: 1, col: 1 }  // bottom-right
+      { row: 0, col: 0 },
+      { row: 0, col: 1 },
+      { row: 1, col: 0 },
+      { row: 1, col: 1 }
     ];
 
-    // Center the 2x2 grid on the page
-    const totalWidth = 2 * cellWidth + gap;
-    const totalHeight = 2 * cellHeight + gap;
-    const startX = (pageWidth - totalWidth) / 2;
-    const startY = (pageHeight - totalHeight) / 2;
-    
+    const startX = margin;
+    const startY = margin;
+
     for (let j = 0; j < studentImages.length; j++) {
       const pos = positions[j];
       const x = startX + pos.col * (cellWidth + gap);
@@ -413,7 +413,7 @@ async function populateTicketForPDF(student, classLabel, examName) {
   // Populate student info
   populateTicketStudentInfo(student, classLabel, examName);
   
-  // Fetch father name and photo
+  // Fetch father name and photo (use caches for speed)
   const [fatherName, photoUrl] = await Promise.all([
     fetchFatherName(student.id),
     fetchStudentPhotoUrl(student.id)
@@ -424,7 +424,7 @@ async function populateTicketForPDF(student, classLabel, examName) {
   updateSubjectsPrinted();
   
   // Wait for images inside the ticket to load (logo, photo, watermark)
-  await waitForImages(document.getElementById('originalTicket'), 2000);
+await waitForImages(document.getElementById('originalTicket'), 800);
 }
 
 function setSchoolHeaderOnPage(details) {
@@ -568,6 +568,7 @@ function formatTime12h(hhmm) {
 
 
 async function fetchFatherName(studentId) {
+  if (fatherNameCache.has(studentId)) return fatherNameCache.get(studentId);
   try {
     const { data } = await supabaseClient
       .from('parents')
@@ -576,9 +577,13 @@ async function fetchFatherName(studentId) {
       .eq('student_id', studentId)
       .eq('relation', 'Father')
       .maybeSingle();
-    return data?.name || '-';
+    const name = data?.name || '-';
+    fatherNameCache.set(studentId, name);
+    return name;
   } catch (_) {
-    return '-';
+    const name = '-';
+    fatherNameCache.set(studentId, name);
+    return name;
   }
 }
 
@@ -617,16 +622,21 @@ async function waitForImages(root, timeoutMs = 1500) {
 }
 
 async function fetchStudentPhotoUrl(studentId) {
+  if (photoUrlCache.has(studentId)) return photoUrlCache.get(studentId);
   try {
     const { data } = await supabaseClient
       .from('users')
-      .select('profile_url')
+      .select('linked_student_id,profile_url')
       .eq('tenant_id', TENANT_ID)
       .eq('linked_student_id', studentId)
       .maybeSingle();
-    return data?.profile_url || '';
+    const url = data?.profile_url || '';
+    photoUrlCache.set(studentId, url);
+    return url;
   } catch (_) {
-    return '';
+    const url = '';
+    photoUrlCache.set(studentId, url);
+    return url;
   }
 }
 
@@ -718,41 +728,39 @@ async function downloadTicketAsPdf() {
 
   // If we are in bulk preview mode, export all tickets in a grid
   if (isBulkMode) {
-    // Prepare images: prefer already-prepared previews; if not complete, render all students on-the-fly
+    // Always regenerate images with PDF mode to ensure signature lines are hidden in PDF
     let images = [];
     try {
       const students = selectedClass ? await fetchStudentsByClass(selectedClass.id) : [];
-      const havePrepared = Array.isArray(bulkPreviewImages) && bulkPreviewImages.length > 0;
-      const preparedComplete = havePrepared && bulkPreviewImages.length >= students.length && students.length > 0;
-      if (preparedComplete) {
-        images = bulkPreviewImages.slice();
-        showProgress(images.length);
-        updateProgress(images.length, images.length);
-      } else if (students.length > 0) {
-        images = [];
-        showProgress(students.length);
-        for (let i = 0; i < students.length; i++) {
-          const student = students[i];
-          const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
-          const nameForExam = el('#examName').value.trim();
-          await populateTicketForPDF(student, classLabel, nameForExam);
-          const ticketEl = el('#originalTicket');
-          // Temporarily hide photo error while capturing PDF snapshot
-          const errEl = el('#tPhotoError');
-          const wasHidden = errEl ? errEl.classList.contains('hidden') : true;
-          if (errEl) errEl.classList.add('hidden');
-          const canvas = await html2canvas(ticketEl, { scale: 1.6, useCORS: true, backgroundColor: '#ffffff', logging: false });
-          if (errEl && !wasHidden) errEl.classList.remove('hidden');
-          images.push({ url: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height });
-          updateProgress(i + 1, students.length);
-        }
-      } else if (havePrepared) {
-        images = bulkPreviewImages.slice();
-        showProgress(images.length);
-        updateProgress(images.length, images.length);
+      showProgress(students.length);
+      // Prefetch metadata to speed up per-student rendering
+      try { await fetchSchoolDetails(); } catch (_) {}
+      try { await prefetchStudentMeta(students); } catch (_) {}
+
+      // Ensure PDF-only styles are active during capture
+      const ticketArea = el('#ticketArea');
+      ticketArea.classList.add('pdf-mode');
+
+      for (let i = 0; i < students.length; i++) {
+        const student = students[i];
+        const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
+        const nameForExam = el('#examName').value.trim();
+        await populateTicketForPDF(student, classLabel, nameForExam);
+        const ticketEl = el('#originalTicket');
+        // Temporarily hide photo error while capturing PDF snapshot
+        const errEl = el('#tPhotoError');
+        const wasHidden = errEl ? errEl.classList.contains('hidden') : true;
+        if (errEl) errEl.classList.add('hidden');
+        const canvas = await html2canvas(ticketEl, { scale: 1.3, useCORS: true, backgroundColor: '#ffffff', logging: false });
+        if (errEl && !wasHidden) errEl.classList.remove('hidden');
+        images.push({ url: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height });
+        updateProgress(i + 1, students.length);
       }
+
+      // Turn off PDF-only styles after capture
+      ticketArea.classList.remove('pdf-mode');
     } catch (_) {
-      // Fallback to whatever previews we have
+      // If something went wrong, fall back to whatever previews we have
       images = bulkPreviewImages.slice();
       showProgress(images.length);
       updateProgress(images.length, images.length);
@@ -763,12 +771,12 @@ async function downloadTicketAsPdf() {
       return;
     }
 
-    // Use landscape to allow full-width tickets while fitting 2 rows x 3 columns
+    // Use landscape to allow full-width tickets while fitting 2 rows x 2 columns
     const pdf = new jsPDF('l', 'pt', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 15;
-    const gap = 5;
+    const margin = 5;
+    const gap = 0;
 
     // Layout 4 tickets per page in a 2x2 grid (landscape)
     const cols = 2;
@@ -780,42 +788,21 @@ async function downloadTicketAsPdf() {
       // Gather up to 4 images for this page; if fewer remain, don't duplicate (show only actual tickets)
       const pageImgs = images.slice(pageStart, pageStart + cols * rows);
 
-      // Compute cell size to fit 2 columns and 2 rows while preserving aspect ratio
       const contentWidth = pageWidth - margin * 2;
       const contentHeight = pageHeight - margin * 2;
 
-      // Use aspect ratio from the first image on this page
-      const ratio = pageImgs[0].height / pageImgs[0].width;
+      const cellWidth = contentWidth / cols;
+      const cellHeight = contentHeight / rows;
 
-      // Calculate maximum cell dimensions considering gaps
-      const availableWidth = contentWidth - (cols - 1) * gap;
-      const availableHeight = contentHeight - (rows - 1) * gap;
-      
-      // Try fitting by width first
-      let cellWidth = availableWidth / cols;
-      let cellHeight = cellWidth * ratio;
-      
-      // If height doesn't fit, constrain by height
-      if (cellHeight * rows > availableHeight) {
-        cellHeight = availableHeight / rows;
-        cellWidth = cellHeight / ratio;
-      }
-
-      // Use fixed gap for cleaner layout
-      const gapX = gap;
-
-      // Center the grid on the page
-      const totalWidth = cols * cellWidth + (cols - 1) * gapX;
-      const totalHeight = rows * cellHeight + (rows - 1) * gap;
-      const startX = (pageWidth - totalWidth) / 2;
-      const startY = (pageHeight - totalHeight) / 2;
+      const startX = margin;
+      const startY = margin;
       
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const idxInPage = r * cols + c;
           if (idxInPage < pageImgs.length) {
             const img = pageImgs[idxInPage];
-            const x = startX + c * (cellWidth + gapX);
+            const x = startX + c * (cellWidth + gap);
             const y = startY + r * (cellHeight + gap);
             pdf.addImage(img.url, 'PNG', x, y, cellWidth, cellHeight);
           }
@@ -832,14 +819,18 @@ async function downloadTicketAsPdf() {
   // Single-ticket fallback (original behaviour)
   const ticketEl = getTicketHtmlForPdf();
   updateSubjectsPrinted();
-  ticketEl.classList.add('pdf-mode');
+  // Apply PDF-only styles on the container so signature lines are hidden
+  const ticketAreaSingle = el('#ticketArea');
+  ticketAreaSingle.classList.add('pdf-mode');
   // Temporarily hide photo error while capturing single-ticket PDF
   const errElSingle = el('#tPhotoError');
   const wasHiddenSingle = errElSingle ? errElSingle.classList.contains('hidden') : true;
   if (errElSingle) errElSingle.classList.add('hidden');
-  const canvas = await html2canvas(ticketEl, { scale: 2, backgroundColor: '#ffffff' });
+  const canvas = await html2canvas(ticketEl, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' });
   if (errElSingle && !wasHiddenSingle) errElSingle.classList.remove('hidden');
   const imgData = canvas.toDataURL('image/png');
+  // Remove PDF-only styles before building PDF
+  ticketAreaSingle.classList.remove('pdf-mode');
   const pdf = new jsPDF('p', 'pt', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -880,6 +871,52 @@ function focusNextSubjectInput(currentEl) {
   }
 }
 
+async function prefetchStudentMeta(students) {
+  const ids = Array.from(new Set(students.map(s => s.id))).filter(Boolean);
+  if (!ids.length) return;
+  try {
+    // Fathers
+    const { data: fathers } = await supabaseClient
+      .from('parents')
+      .select('student_id,name,relation')
+      .eq('tenant_id', TENANT_ID)
+      .in('student_id', ids)
+      .eq('relation', 'Father');
+    if (Array.isArray(fathers)) {
+      for (const row of fathers) {
+        fatherNameCache.set(row.student_id, row.name || '-');
+      }
+    }
+  } catch (_) {}
+  try {
+    // Photos
+    const { data: photos } = await supabaseClient
+      .from('users')
+      .select('linked_student_id,profile_url')
+      .eq('tenant_id', TENANT_ID)
+      .in('linked_student_id', ids);
+    if (Array.isArray(photos)) {
+      for (const row of photos) {
+        photoUrlCache.set(row.linked_student_id, row.profile_url || '');
+      }
+    }
+  } catch (_) {}
+}
+
+async function downloadAllTicketsNow() {
+  if (!selectedClass) {
+    alert('Please select a class first.');
+    return;
+  }
+  // Fetch all students once and generate PDF directly (no preview)
+  const students = await fetchStudentsByClass(selectedClass.id);
+  if (!students || students.length === 0) {
+    alert('No students found in this class');
+    return;
+  }
+  await generateBulkTicketsPDF(students);
+}
+
 async function init() {
   try {
     // Load credentials without logging secrets
@@ -915,10 +952,12 @@ async function init() {
     el('#backToSubjects').addEventListener('click', () => {
       if (selectedClass) showSubjectDesignSection(selectedClass);
     });
-    el('#closeOverlay').addEventListener('click', closeOverlay);
-    el('#printTicket').addEventListener('click', printTicket);
-    el('#downloadPdf').addEventListener('click', downloadTicketAsPdf);
-    el('#subjectsBody').addEventListener('input', () => updateSubjectsPrinted());
+el('#closeOverlay').addEventListener('click', closeOverlay);
+el('#printTicket').addEventListener('click', printTicket);
+el('#downloadPdf').addEventListener('click', downloadTicketAsPdf);
+const downloadAllBtn = document.getElementById('downloadAllPdf');
+if (downloadAllBtn) downloadAllBtn.addEventListener('click', downloadAllTicketsNow);
+el('#subjectsBody').addEventListener('input', () => updateSubjectsPrinted());
 
     // Back button: return to hall ticket design overlay
     const backBtn = el('#backToDesign');

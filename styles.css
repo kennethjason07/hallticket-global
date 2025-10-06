@@ -274,6 +274,8 @@ h2 { margin: 12px 0 16px; }
 
 /* Hide editor when preparing PDF */
 .ticket.classic.pdf-mode .subjects-container { display: none; }
+/* PDF-specific adjustments */
+.ticket.classic.pdf-mode .classic-table .sigline { border-bottom: none; }
 
 /* Responsive adjustments for dual tickets */
 @media print {
