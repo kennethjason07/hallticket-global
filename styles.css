@@ -284,6 +284,14 @@ h2 { margin: 12px 0 16px; }
 .ticket.classic.pdf-mode .classic-signatures .sig-item { text-align: right; }
 .ticket.classic.pdf-mode .classic-signatures.one .line { margin: 0 0 6px 0; width: 220px; }
 
+/* On-screen: match PDF look */
+.ticket.classic #tSchoolName { color: #1e40af; }
+.ticket.classic .classic-exam-title { color: #dc2626; }
+.classic-table .sigline { border-bottom: none; }
+.classic-signatures.one { display: flex; justify-content: flex-end; }
+.classic-signatures .sig-item { text-align: right; }
+.classic-signatures.one .line { margin: 0 0 6px 0; width: 220px; }
+
 /* Responsive adjustments for dual tickets */
 @media print {
   .ticket.classic.dual-mode {
