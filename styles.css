@@ -80,6 +80,11 @@ h2 { margin: 12px 0 16px; }
 .overlay .overlay-content { position: relative; background: #fff; border-radius: 12px; padding: 0; width: min(100%, 1000px); max-height: 95vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.2); overflow: hidden; }
 .close-btn { position: absolute; right: 16px; top: 12px; border: none; background: transparent; font-size: 24px; cursor: pointer; z-index: 1000; color: #6b7280; }
 .ticket-actions { display: flex; gap: 8px; align-items: center; padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; position: sticky; top: 0; z-index: 999; border-radius: 12px 12px 0 0; flex-wrap: wrap; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+/* Progress bar for PDF generation */
+.progress { margin: 8px 16px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 8px; }
+.progress .bar { height: 8px; width: 0%; background: #3b82f6; border-radius: 8px; transition: width 0.2s ease; }
+.progress .text { margin: 6px 4px 8px; font-size: 12px; color: #374151; }
 .btn { border: 1px solid #d1d5db; background: #fff; padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s ease; }
 .btn:hover { background: #f3f4f6; }
 .btn.primary { background: #111827; color: #fff; border-color: #111827; }
@@ -158,7 +163,7 @@ h2 { margin: 12px 0 16px; }
 /* Bulk preview grid for Full Class Tickets */
 .bulk { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 16px; }
 .bulk .ticket-preview { width: 100%; height: auto; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.06); background:#fff; }
-.bulk .page-sep { height: 1px; background: #e5e7eb; margin: 6px 0 0; }
+.bulk .page-sep { height: auto; background: #e5e7eb; margin: 16px 0; padding: 8px; text-align: center; font-weight: 600; color: #374151; border-radius: 4px; }
 
 /* Keep the single ticket in DOM for html2canvas while hiding it from view */
 .offscreen-capture { position: absolute !important; left: -10000px !important; top: -10000px !important; opacity: 0 !important; pointer-events: none !important; }
@@ -233,6 +238,7 @@ h2 { margin: 12px 0 16px; }
 .classic-left .gap { display: inline-block; width: 18px; }
 .classic-photo { display: flex; align-items: flex-start; justify-content: flex-end; }
 .classic-photo img { width: 160px; height: 180px; object-fit: cover; border: 1px solid #111; background: #eee; }
+.photo-error { margin-top: 4px; color: #b91c1c; font-size: 11px; text-align: center; }
 .classic-subjects-title { margin-top: 12px; font-weight: 700; }
 .subjects-printed { min-height: 120px; padding-top: 8px; color: #333; font-size: 14px; }
 

@@ -69,6 +69,10 @@
           <button id="printTicket" class="btn primary">Print</button>
           <button id="downloadPdf" class="btn">Download PDF</button>
         </div>
+        <div id="downloadProgress" class="progress hidden" aria-live="polite">
+          <div id="downloadProgressBar" class="bar"></div>
+          <div id="downloadProgressText" class="text"></div>
+        </div>
 
         <div class="ticket-wrapper">
         <div id="ticketArea" class="ticket classic">
@@ -76,9 +80,9 @@
           <div class="classic-page" id="originalTicket">
             <div class="classic-border-outer">
               <div class="classic-border-inner">
-                <img id="ticketWatermark" class="ticket-watermark" alt="Watermark" />
+                <img id="ticketWatermark" class="ticket-watermark" alt="Watermark" crossorigin="anonymous" />
                 <div class="classic-header">
-                  <img id="tSchoolLogo" class="classic-logo" alt="School Logo" />
+                  <img id="tSchoolLogo" class="classic-logo" alt="School Logo" crossorigin="anonymous" />
                   <div class="classic-school-title">
                     <div id="tSchoolName" class="classic-school-name">School Name</div>
                     <div id="tSchoolAddress" class="classic-school-address">Address</div>
@@ -108,7 +112,8 @@
                     </table>
                   </div>
                   <div class="classic-photo">
-                    <img id="tPhoto" alt="Photo" />
+                    <img id="tPhoto" alt="Photo" crossorigin="anonymous" />
+                    <div id="tPhotoError" class="photo-error hidden">Photo not available</div>
                   </div>
                 </div>
 

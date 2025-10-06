@@ -297,9 +297,10 @@ async function generateFullClassTickets() {
       img.src = url;
       img.alt = `Ticket ${i + 1}`;
       bulk.appendChild(img);
-      if (i % 2 === 1) {
+      if ((i + 1) % 4 === 0) {
         const sep = document.createElement('div');
         sep.className = 'page-sep';
+        sep.textContent = `--- Page ${Math.floor((i + 1) / 4)} ---`;
         bulk.appendChild(sep);
       }
     }
@@ -308,7 +309,7 @@ async function generateFullClassTickets() {
 
 async function generateBulkTicketsPDF(students) {
   const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF('p', 'pt', 'a4');
+  const pdf = new jsPDF('l', 'pt', 'a4'); // Use landscape for 2x2 grid
 
   const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
   const examName = el('#examName').value.trim();
@@ -324,10 +325,9 @@ async function generateBulkTicketsPDF(students) {
 
   let isFirstPage = true;
 
-  // Render two students per page
-  for (let i = 0; i < students.length; i += 2) {
-    const first = students[i];
-    const second = students[i + 1];
+  // Render four students per page in 2x2 grid
+  for (let i = 0; i < students.length; i += 4) {
+    const pageStudents = students.slice(i, i + 4);
 
     if (!isFirstPage) {
       pdf.addPage();
@@ -342,42 +342,56 @@ async function generateBulkTicketsPDF(students) {
       return { canvas, dataUrl: canvas.toDataURL('image/png') };
     };
 
-    // Render first student
-    const firstImg = await renderStudent(first);
-
-    // Compute target sizes to fit two vertically without overlap
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 20; // 20pt margins
-    const gap = 10; // gap between two tickets
-
-    // Base size if we used full width
-    let targetWidth = pageWidth - margin * 2;
-    let targetHeight = firstImg.canvas.height * (targetWidth / firstImg.canvas.width);
-
-    // Scale if two won't fit vertically
-    const availableHeight = pageHeight - margin * 2 - gap;
-    const totalNeeded = targetHeight * 2;
-    if (totalNeeded > availableHeight) {
-      const ratio = availableHeight / totalNeeded;
-      targetWidth *= ratio;
-      targetHeight *= ratio;
+    // Render all students for this page
+    const studentImages = [];
+    for (const student of pageStudents) {
+      const img = await renderStudent(student);
+      studentImages.push(img);
     }
 
-    // Add first image
-    pdf.addImage(firstImg.dataUrl, 'PNG', margin, margin, targetWidth, targetHeight);
+    if (studentImages.length === 0) continue;
 
-    // Render and add second image if exists
-    if (second) {
-      const secondImg = await renderStudent(second);
-      pdf.addImage(
-        secondImg.dataUrl,
-        'PNG',
-        margin,
-        margin + targetHeight + gap,
-        targetWidth,
-        targetHeight
-      );
+    // Compute sizes for 2x2 grid
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 15;
+    const gap = 5;
+
+    // Calculate cell dimensions with optimized spacing
+    const availableWidth = pageWidth - margin * 2 - gap;
+    const availableHeight = pageHeight - margin * 2 - gap;
+    const aspectRatio = studentImages[0].canvas.height / studentImages[0].canvas.width;
+    
+    // Try fitting by width first
+    let cellWidth = availableWidth / 2;
+    let cellHeight = cellWidth * aspectRatio;
+    
+    // If height doesn't fit, constrain by height
+    const maxCellHeight = availableHeight / 2;
+    if (cellHeight > maxCellHeight) {
+      cellHeight = maxCellHeight;
+      cellWidth = cellHeight / aspectRatio;
+    }
+
+    // Place images in 2x2 grid
+    const positions = [
+      { row: 0, col: 0 }, // top-left
+      { row: 0, col: 1 }, // top-right
+      { row: 1, col: 0 }, // bottom-left
+      { row: 1, col: 1 }  // bottom-right
+    ];
+
+    // Center the 2x2 grid on the page
+    const totalWidth = 2 * cellWidth + gap;
+    const totalHeight = 2 * cellHeight + gap;
+    const startX = (pageWidth - totalWidth) / 2;
+    const startY = (pageHeight - totalHeight) / 2;
+    
+    for (let j = 0; j < studentImages.length; j++) {
+      const pos = positions[j];
+      const x = startX + pos.col * (cellWidth + gap);
+      const y = startY + pos.row * (cellHeight + gap);
+      pdf.addImage(studentImages[j].dataUrl, 'PNG', x, y, cellWidth, cellHeight);
     }
   }
 
@@ -405,12 +419,12 @@ async function populateTicketForPDF(student, classLabel, examName) {
     fetchStudentPhotoUrl(student.id)
   ]);
   const fEl = el('#tFatherName'); if (fEl) fEl.textContent = fatherName || '-';
-  const pEl = el('#tPhoto'); if (pEl) { if (photoUrl) pEl.src = photoUrl; else pEl.removeAttribute('src'); }
+  setStudentPhoto(photoUrl);
   
   updateSubjectsPrinted();
   
-  // Wait a bit for images to load
-  await new Promise(resolve => setTimeout(resolve, 100));
+  // Wait for images inside the ticket to load (logo, photo, watermark)
+  await waitForImages(document.getElementById('originalTicket'), 2000);
 }
 
 function setSchoolHeaderOnPage(details) {
@@ -429,6 +443,7 @@ function setSchoolHeaderOnTicket(details) {
   const tLogo = el('#tSchoolLogo');
   const tName = el('#tSchoolName');
   const tAddr = el('#tSchoolAddress');
+  if (tLogo) tLogo.crossOrigin = 'anonymous';
   if (details) {
     tName.textContent = details.name || 'School Name';
     const address = [details.address, details.city, details.state, details.pincode].filter(Boolean).join(', ');
@@ -438,6 +453,7 @@ function setSchoolHeaderOnTicket(details) {
   // Set centered watermark image to school logo (or hide if none)
   const wm = el('#ticketWatermark');
   if (wm) {
+    wm.crossOrigin = 'anonymous';
     if (details && details.logo_url) {
       wm.src = details.logo_url;
       wm.style.display = '';
@@ -508,6 +524,35 @@ function formatDate(d) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+// Progress helpers
+function showProgress(total) {
+  const cont = el('#downloadProgress');
+  if (!cont) return;
+  cont.classList.remove('hidden');
+  cont.dataset.total = String(total || 0);
+  updateProgress(0, total || 0);
+}
+function updateProgress(current, total) {
+  const bar = el('#downloadProgressBar');
+  const txt = el('#downloadProgressText');
+  if (!bar || !txt) return;
+  const pct = total ? Math.round((current / total) * 100) : 0;
+  bar.style.width = `${pct}%`;
+  txt.textContent = `Preparing ${pct}% (${current}/${total})`;
+}
+function setProgressMessage(msg) {
+  const txt = el('#downloadProgressText');
+  if (txt) txt.textContent = msg;
+}
+function hideProgress() {
+  const cont = el('#downloadProgress');
+  const bar = el('#downloadProgressBar');
+  const txt = el('#downloadProgressText');
+  if (cont) cont.classList.add('hidden');
+  if (bar) bar.style.width = '0%';
+  if (txt) txt.textContent = '';
+}
+
 function formatTime12h(hhmm) {
   if (!hhmm) return '';
   const parts = hhmm.split(':');
@@ -535,6 +580,40 @@ async function fetchFatherName(studentId) {
   } catch (_) {
     return '-';
   }
+}
+
+function setStudentPhoto(photoUrl) {
+  const pEl = el('#tPhoto');
+  const errEl = el('#tPhotoError');
+  if (!pEl || !errEl) return;
+  pEl.crossOrigin = 'anonymous';
+  // Clear existing handlers
+  pEl.onerror = null;
+  if (photoUrl) {
+    errEl.classList.add('hidden');
+    pEl.onerror = () => {
+      errEl.classList.remove('hidden');
+      pEl.removeAttribute('src');
+    };
+    pEl.src = photoUrl;
+  } else {
+    errEl.classList.remove('hidden');
+    pEl.removeAttribute('src');
+  }
+}
+
+async function waitForImages(root, timeoutMs = 1500) {
+  const imgs = Array.from(root.querySelectorAll('img'));
+  const waiters = imgs.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise(res => {
+      const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); res(); };
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    });
+  });
+  const timeout = new Promise(res => setTimeout(res, timeoutMs));
+  await Promise.race([Promise.all(waiters), timeout]);
 }
 
 async function fetchStudentPhotoUrl(studentId) {
@@ -615,7 +694,7 @@ async function handleStudentClick(student) {
     fetchStudentPhotoUrl(student.id)
   ]);
   const fEl = el('#tFatherName'); if (fEl) fEl.textContent = fatherName || '-';
-  const pEl = el('#tPhoto'); if (pEl) { if (photoUrl) pEl.src = photoUrl; else pEl.removeAttribute('src'); }
+  setStudentPhoto(photoUrl);
   
   // Reset subject rows with one default row if none exist
   if (el('#subjectsBody').children.length === 0) {
@@ -637,59 +716,116 @@ function getTicketHtmlForPdf() {
 async function downloadTicketAsPdf() {
   const { jsPDF } = window.jspdf;
 
-  // If we are in bulk preview mode, use the prepared images and export two per page
-  if (isBulkMode && bulkPreviewImages.length) {
-    // Use landscape to allow full-width tickets while fitting two vertically
+  // If we are in bulk preview mode, export all tickets in a grid
+  if (isBulkMode) {
+    // Prepare images: prefer already-prepared previews; if not complete, render all students on-the-fly
+    let images = [];
+    try {
+      const students = selectedClass ? await fetchStudentsByClass(selectedClass.id) : [];
+      const havePrepared = Array.isArray(bulkPreviewImages) && bulkPreviewImages.length > 0;
+      const preparedComplete = havePrepared && bulkPreviewImages.length >= students.length && students.length > 0;
+      if (preparedComplete) {
+        images = bulkPreviewImages.slice();
+        showProgress(images.length);
+        updateProgress(images.length, images.length);
+      } else if (students.length > 0) {
+        images = [];
+        showProgress(students.length);
+        for (let i = 0; i < students.length; i++) {
+          const student = students[i];
+          const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
+          const nameForExam = el('#examName').value.trim();
+          await populateTicketForPDF(student, classLabel, nameForExam);
+          const ticketEl = el('#originalTicket');
+          // Temporarily hide photo error while capturing PDF snapshot
+          const errEl = el('#tPhotoError');
+          const wasHidden = errEl ? errEl.classList.contains('hidden') : true;
+          if (errEl) errEl.classList.add('hidden');
+          const canvas = await html2canvas(ticketEl, { scale: 1.6, useCORS: true, backgroundColor: '#ffffff', logging: false });
+          if (errEl && !wasHidden) errEl.classList.remove('hidden');
+          images.push({ url: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height });
+          updateProgress(i + 1, students.length);
+        }
+      } else if (havePrepared) {
+        images = bulkPreviewImages.slice();
+        showProgress(images.length);
+        updateProgress(images.length, images.length);
+      }
+    } catch (_) {
+      // Fallback to whatever previews we have
+      images = bulkPreviewImages.slice();
+      showProgress(images.length);
+      updateProgress(images.length, images.length);
+    }
+
+    if (!images.length) {
+      alert('No tickets to export. Please generate full class tickets first.');
+      return;
+    }
+
+    // Use landscape to allow full-width tickets while fitting 2 rows x 3 columns
     const pdf = new jsPDF('l', 'pt', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 6;
-    const gap = 8;
+    const margin = 15;
+    const gap = 5;
 
-    // Layout 6 tickets per page in a 3x2 grid (landscape)
-    const cols = 3;
+    // Layout 4 tickets per page in a 2x2 grid (landscape)
+    const cols = 2;
     const rows = 2;
-    for (let pageStart = 0; pageStart < bulkPreviewImages.length; pageStart += cols * rows) {
+    setProgressMessage('Generating PDF...');
+    for (let pageStart = 0; pageStart < images.length; pageStart += cols * rows) {
       if (pageStart !== 0) pdf.addPage();
 
-      // Gather up to 6 images for this page; if fewer remain, duplicate to fill 6
-      const pageImgs = bulkPreviewImages.slice(pageStart, pageStart + cols * rows);
-      if (pageImgs.length < cols * rows && pageImgs.length > 0) {
-        const need = cols * rows - pageImgs.length;
-        for (let k = 0; k < need; k++) {
-          pageImgs.push(pageImgs[k % pageImgs.length]);
-        }
-      }
+      // Gather up to 4 images for this page; if fewer remain, don't duplicate (show only actual tickets)
+      const pageImgs = images.slice(pageStart, pageStart + cols * rows);
 
-      // Compute cell size to fit 3 columns and 2 rows while preserving aspect ratio
+      // Compute cell size to fit 2 columns and 2 rows while preserving aspect ratio
       const contentWidth = pageWidth - margin * 2;
-      const contentHeight = pageHeight - margin * 2 - (rows - 1) * gap;
+      const contentHeight = pageHeight - margin * 2;
 
       // Use aspect ratio from the first image on this page
       const ratio = pageImgs[0].height / pageImgs[0].width;
 
-      // Base width per column; height per row may constrain width
-      const maxCellWidthByCols = (contentWidth - (cols - 1) * gap) / cols;
-      const maxCellWidthByRows = contentHeight / (rows * ratio);
-      const cellWidth = Math.min(maxCellWidthByCols, maxCellWidthByRows);
-      const cellHeight = cellWidth * ratio;
+      // Calculate maximum cell dimensions considering gaps
+      const availableWidth = contentWidth - (cols - 1) * gap;
+      const availableHeight = contentHeight - (rows - 1) * gap;
+      
+      // Try fitting by width first
+      let cellWidth = availableWidth / cols;
+      let cellHeight = cellWidth * ratio;
+      
+      // If height doesn't fit, constrain by height
+      if (cellHeight * rows > availableHeight) {
+        cellHeight = availableHeight / rows;
+        cellWidth = cellHeight / ratio;
+      }
 
-      // Distribute leftover width as horizontal gap so each row fills full width
-      const gapX = cols > 1 ? (contentWidth - cols * cellWidth) / (cols - 1) : 0;
+      // Use fixed gap for cleaner layout
+      const gapX = gap;
 
+      // Center the grid on the page
+      const totalWidth = cols * cellWidth + (cols - 1) * gapX;
+      const totalHeight = rows * cellHeight + (rows - 1) * gap;
+      const startX = (pageWidth - totalWidth) / 2;
+      const startY = (pageHeight - totalHeight) / 2;
+      
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           const idxInPage = r * cols + c;
-          const img = pageImgs[idxInPage];
-          const x = margin + c * (cellWidth + gapX);
-          const y = margin + r * (cellHeight + gap);
-          pdf.addImage(img.url, 'PNG', x, y, cellWidth, cellHeight);
+          if (idxInPage < pageImgs.length) {
+            const img = pageImgs[idxInPage];
+            const x = startX + c * (cellWidth + gapX);
+            const y = startY + r * (cellHeight + gap);
+            pdf.addImage(img.url, 'PNG', x, y, cellWidth, cellHeight);
+          }
         }
       }
     }
 
     const className = [selectedClass?.class_name, selectedClass?.section].filter(Boolean).join('_') || 'class';
     pdf.save(`${className}_all_hall_tickets.pdf`);
+    hideProgress();
     return;
   }
 
@@ -697,7 +833,12 @@ async function downloadTicketAsPdf() {
   const ticketEl = getTicketHtmlForPdf();
   updateSubjectsPrinted();
   ticketEl.classList.add('pdf-mode');
+  // Temporarily hide photo error while capturing single-ticket PDF
+  const errElSingle = el('#tPhotoError');
+  const wasHiddenSingle = errElSingle ? errElSingle.classList.contains('hidden') : true;
+  if (errElSingle) errElSingle.classList.add('hidden');
   const canvas = await html2canvas(ticketEl, { scale: 2, backgroundColor: '#ffffff' });
+  if (errElSingle && !wasHiddenSingle) errElSingle.classList.remove('hidden');
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF('p', 'pt', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
