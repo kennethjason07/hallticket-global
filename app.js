@@ -290,12 +290,21 @@ async function generateFullClassTickets() {
   const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
   const nameForExam = el('#examName').value.trim();
 
+  // Ensure previews use the exact PDF formatting (e.g., bottom-right signature)
+  const ticketArea = el('#ticketArea');
+  ticketArea.classList.add('pdf-mode');
+
   // Render preview images for each student sequentially to avoid ID conflicts and heavy DOM cloning
   for (let i = 0; i < students.length; i++) {
     const student = students[i];
     await populateTicketForPDF(student, classLabel, nameForExam);
     const ticketEl = el('#originalTicket');
-    const canvas = await html2canvas(ticketEl, { scale: 1.6, useCORS: true, backgroundColor: '#ffffff' });
+    // Hide photo error to avoid showing red text in previews
+    const errEl = el('#tPhotoError');
+    const wasHidden = errEl ? errEl.classList.contains('hidden') : true;
+    if (errEl) errEl.classList.add('hidden');
+    const canvas = await html2canvas(ticketEl, { scale: 1.3, useCORS: true, backgroundColor: '#ffffff' });
+    if (errEl && !wasHidden) errEl.classList.remove('hidden');
     const url = canvas.toDataURL('image/png');
     bulkPreviewImages.push({ url, width: canvas.width, height: canvas.height });
     if (bulk) {
@@ -312,6 +321,9 @@ async function generateFullClassTickets() {
       }
     }
   }
+
+  // Remove PDF formatting from the hidden ticket after preview generation
+  ticketArea.classList.remove('pdf-mode');
 }
 
 async function generateBulkTicketsPDF(students) {
