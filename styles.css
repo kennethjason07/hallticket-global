@@ -161,7 +161,7 @@ h2 { margin: 12px 0 16px; }
 }
 
 /* Bulk preview grid for Full Class Tickets */
-.bulk { padding: 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
+.bulk { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
 .bulk .ticket-preview { width: 100%; height: auto; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.06); background:#fff; }
 .bulk .page-sep { grid-column: 1 / -1; height: auto; background: #e5e7eb; margin: 8px 0; padding: 6px; text-align: center; font-weight: 600; color: #374151; border-radius: 4px; }
 
@@ -246,6 +246,17 @@ h2 { margin: 12px 0 16px; }
 .classic-signatures .sig-item { text-align: center; }
 .classic-signatures .line { border-bottom: 1px solid #111; height: 22px; margin: 0 30px 6px; }
 .classic-signatures .text { font-size: 12px; color: #111; }
+
+/* Principal signature image styling */
+.principal-signature-img {
+  width: 120px;
+  height: 60px;
+  object-fit: contain;
+  margin-bottom: 5px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 .classic-notes { margin-top: 10px; font-size: 11px; color: #111; }
 .classic-notes .note { margin-top: 6px; }

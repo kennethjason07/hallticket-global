@@ -313,10 +313,10 @@ async function generateFullClassTickets() {
       img.src = url;
       img.alt = `Ticket ${i + 1}`;
       bulk.appendChild(img);
-      if ((i + 1) % 4 === 0) {
+      if ((i + 1) % 2 === 0) {
         const sep = document.createElement('div');
         sep.className = 'page-sep';
-        sep.textContent = `--- Page ${Math.floor((i + 1) / 4)} ---`;
+        sep.textContent = `--- Page ${Math.ceil((i + 1) / 2)} ---`;
         bulk.appendChild(sep);
       }
     }
@@ -328,7 +328,7 @@ async function generateFullClassTickets() {
 
 async function generateBulkTicketsPDF(students) {
   const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF('l', 'pt', 'a4'); // Use landscape for 2x2 grid
+  const pdf = new jsPDF('p', 'pt', 'a4'); // Use portrait for 2 tickets per page
 
   const classLabel = [selectedClass.class_name, selectedClass.section].filter(Boolean).join(' - ');
   const examName = el('#examName').value.trim();
@@ -348,9 +348,9 @@ async function generateBulkTicketsPDF(students) {
 
   let isFirstPage = true;
 
-  // Render four students per page in 2x2 grid
-  for (let i = 0; i < students.length; i += 4) {
-    const pageStudents = students.slice(i, i + 4);
+  // Render two students per page
+  for (let i = 0; i < students.length; i += 2) {
+    const pageStudents = students.slice(i, i + 2);
 
     if (!isFirstPage) {
       pdf.addPage();
@@ -374,26 +374,24 @@ const canvas = await html2canvas(ticketEl, { scale: 1.3, useCORS: true, backgrou
 
     if (studentImages.length === 0) continue;
 
-    // Compute sizes for 2x2 grid with minimal margins and no gaps to reduce blank space
+    // Compute sizes for 2 tickets per page (top and bottom)
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 5;
-    const gap = 0;
+    const margin = 10;
+    const gap = 10;
 
-    const cols = 2;
+    const cols = 1;
     const rows = 2;
     const contentWidth = pageWidth - margin * 2;
     const contentHeight = pageHeight - margin * 2;
 
-    const cellWidth = contentWidth / cols;
-    const cellHeight = contentHeight / rows;
+    const cellWidth = contentWidth;
+    const cellHeight = (contentHeight - gap) / rows;
 
-    // Place images to fill each cell (may slightly stretch to cover full page)
+    // Place images vertically (top and bottom)
     const positions = [
       { row: 0, col: 0 },
-      { row: 0, col: 1 },
-      { row: 1, col: 0 },
-      { row: 1, col: 1 }
+      { row: 1, col: 0 }
     ];
 
     const startX = margin;
@@ -401,7 +399,7 @@ const canvas = await html2canvas(ticketEl, { scale: 1.3, useCORS: true, backgrou
 
     for (let j = 0; j < studentImages.length; j++) {
       const pos = positions[j];
-      const x = startX + pos.col * (cellWidth + gap);
+      const x = startX;
       const y = startY + pos.row * (cellHeight + gap);
       pdf.addImage(studentImages[j].dataUrl, 'PNG', x, y, cellWidth, cellHeight);
     }
@@ -783,42 +781,37 @@ async function downloadTicketAsPdf() {
       return;
     }
 
-    // Use landscape to allow full-width tickets while fitting 2 rows x 2 columns
-    const pdf = new jsPDF('l', 'pt', 'a4');
+    // Use portrait for 2 tickets per page (top and bottom)
+    const pdf = new jsPDF('p', 'pt', 'a4');
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const margin = 5;
-    const gap = 0;
+    const margin = 10;
+    const gap = 10;
 
-    // Layout 4 tickets per page in a 2x2 grid (landscape)
-    const cols = 2;
+    // Layout 2 tickets per page vertically
+    const cols = 1;
     const rows = 2;
     setProgressMessage('Generating PDF...');
     for (let pageStart = 0; pageStart < images.length; pageStart += cols * rows) {
       if (pageStart !== 0) pdf.addPage();
 
-      // Gather up to 4 images for this page; if fewer remain, don't duplicate (show only actual tickets)
+      // Gather up to 2 images for this page
       const pageImgs = images.slice(pageStart, pageStart + cols * rows);
 
       const contentWidth = pageWidth - margin * 2;
       const contentHeight = pageHeight - margin * 2;
 
-      const cellWidth = contentWidth / cols;
-      const cellHeight = contentHeight / rows;
+      const cellWidth = contentWidth;
+      const cellHeight = (contentHeight - gap) / rows;
 
       const startX = margin;
       const startY = margin;
       
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const idxInPage = r * cols + c;
-          if (idxInPage < pageImgs.length) {
-            const img = pageImgs[idxInPage];
-            const x = startX + c * (cellWidth + gap);
-            const y = startY + r * (cellHeight + gap);
-            pdf.addImage(img.url, 'PNG', x, y, cellWidth, cellHeight);
-          }
-        }
+      for (let i = 0; i < pageImgs.length; i++) {
+        const img = pageImgs[i];
+        const x = startX;
+        const y = startY + i * (cellHeight + gap);
+        pdf.addImage(img.url, 'PNG', x, y, cellWidth, cellHeight);
       }
     }
 
