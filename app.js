@@ -433,8 +433,8 @@ async function populateTicketForPDF(student, classLabel, examName) {
   
   updateSubjectsPrinted();
   
-  // Wait for images inside the ticket to load (logo, photo, watermark)
-await waitForImages(document.getElementById('originalTicket'), 800);
+  // Wait for images inside the ticket to load (logo, photo, watermark) - increased timeout
+  await waitForImages(document.getElementById('originalTicket'), 5000);
 }
 
 function setSchoolHeaderOnPage(details) {
@@ -600,53 +600,146 @@ async function fetchFatherName(studentId) {
 function setStudentPhoto(photoUrl) {
   const pEl = el('#tPhoto');
   const errEl = el('#tPhotoError');
-  if (!pEl || !errEl) return;
-  pEl.crossOrigin = 'anonymous';
-  // Clear existing handlers
-  pEl.onerror = null;
-  if (photoUrl) {
-    errEl.classList.add('hidden');
-    pEl.onerror = () => {
-      errEl.classList.remove('hidden');
-      pEl.removeAttribute('src');
-    };
-    pEl.src = photoUrl;
-  } else {
-    errEl.classList.remove('hidden');
-    pEl.removeAttribute('src');
+  
+  if (!pEl || !errEl) {
+    console.error('❌ Photo elements not found in DOM');
+    return;
   }
+  
+  console.log(`🖼️ Setting student photo: ${photoUrl || 'empty'}`);
+  
+  // Clear existing handlers and state
+  pEl.onerror = null;
+  pEl.onload = null;
+  pEl.removeAttribute('src');
+  
+  if (!photoUrl) {
+    console.log('⚠️ No photo URL provided, showing error state');
+    errEl.classList.remove('hidden');
+    errEl.textContent = 'Photo not available';
+    return;
+  }
+  
+  // Set CORS attributes more thoroughly
+  pEl.crossOrigin = 'anonymous';
+  pEl.setAttribute('crossorigin', 'anonymous');
+  
+  // Set up error handler
+  pEl.onerror = function(event) {
+    console.error(`❌ Photo failed to load: ${photoUrl}`, event);
+    errEl.classList.remove('hidden');
+    errEl.textContent = 'Photo failed to load';
+    pEl.removeAttribute('src');
+  };
+  
+  // Set up success handler
+  pEl.onload = function() {
+    console.log(`✅ Photo loaded successfully: ${photoUrl} (${this.naturalWidth}x${this.naturalHeight})`);
+    errEl.classList.add('hidden');
+  };
+  
+  // Hide error initially
+  errEl.classList.add('hidden');
+  
+  // Set the source (this will trigger loading)
+  pEl.src = photoUrl;
 }
 
-async function waitForImages(root, timeoutMs = 1500) {
+async function waitForImages(root, timeoutMs = 3000) {
   const imgs = Array.from(root.querySelectorAll('img'));
-  const waiters = imgs.map(img => {
-    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-    return new Promise(res => {
-      const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); res(); };
-      img.addEventListener('load', done, { once: true });
-      img.addEventListener('error', done, { once: true });
+  console.log(`⏳ Waiting for ${imgs.length} images to load...`);
+  
+  if (imgs.length === 0) {
+    console.log('✅ No images to wait for');
+    return;
+  }
+  
+  const waiters = imgs.map((img, index) => {
+    // If image is already loaded
+    if (img.complete && img.naturalWidth > 0) {
+      console.log(`✅ Image ${index + 1} already loaded`);
+      return Promise.resolve();
+    }
+    
+    // If image has no src, don't wait for it
+    if (!img.src) {
+      console.log(`⚠️ Image ${index + 1} has no src`);
+      return Promise.resolve();
+    }
+    
+    return new Promise(resolve => {
+      const cleanup = () => {
+        img.removeEventListener('load', onLoad);
+        img.removeEventListener('error', onError);
+      };
+      
+      const onLoad = () => {
+        console.log(`✅ Image ${index + 1} loaded successfully`);
+        cleanup();
+        resolve();
+      };
+      
+      const onError = (event) => {
+        console.error(`❌ Image ${index + 1} failed to load:`, img.src, event);
+        cleanup();
+        resolve(); // Resolve anyway to not block the process
+      };
+      
+      img.addEventListener('load', onLoad, { once: true });
+      img.addEventListener('error', onError, { once: true });
     });
   });
-  const timeout = new Promise(res => setTimeout(res, timeoutMs));
+  
+  const timeout = new Promise(resolve => {
+    setTimeout(() => {
+      console.log(`⏰ Image loading timeout after ${timeoutMs}ms`);
+      resolve();
+    }, timeoutMs);
+  });
+  
   await Promise.race([Promise.all(waiters), timeout]);
+  console.log('✅ Image waiting completed');
 }
 
 async function fetchStudentPhotoUrl(studentId) {
-  if (photoUrlCache.has(studentId)) return photoUrlCache.get(studentId);
+  console.log(`🔍 Fetching photo for student ID: ${studentId}`);
+  
+  if (photoUrlCache.has(studentId)) {
+    const cachedUrl = photoUrlCache.get(studentId);
+    console.log(`📋 Using cached photo URL: ${cachedUrl || 'empty'}`);
+    return cachedUrl;
+  }
+  
   try {
-    const { data } = await supabaseClient
-      .from('users')
-      .select('linked_student_id,profile_url')
+    const { data, error } = await supabaseClient
+      .from('students')
+      .select('id,photo_url')
       .eq('tenant_id', TENANT_ID)
-      .eq('linked_student_id', studentId)
+      .eq('id', studentId)
       .maybeSingle();
-    const url = data?.profile_url || '';
+    
+    if (error) {
+      console.error(`❌ Database error fetching photo for student ${studentId}:`, error);
+      photoUrlCache.set(studentId, '');
+      return '';
+    }
+    
+    if (!data) {
+      console.log(`⚠️ Student not found: ${studentId}`);
+      photoUrlCache.set(studentId, '');
+      return '';
+    }
+    
+    const url = data.photo_url || '';
+    console.log(`📷 Found photo URL for student ${studentId}: ${url || 'empty'}`);
+    
     photoUrlCache.set(studentId, url);
     return url;
-  } catch (_) {
-    const url = '';
-    photoUrlCache.set(studentId, url);
-    return url;
+    
+  } catch (error) {
+    console.error(`💥 Exception fetching photo for student ${studentId}:`, error);
+    photoUrlCache.set(studentId, '');
+    return '';
   }
 }
 
@@ -894,15 +987,15 @@ async function prefetchStudentMeta(students) {
     }
   } catch (_) {}
   try {
-    // Photos
+    // Photos from students table
     const { data: photos } = await supabaseClient
-      .from('users')
-      .select('linked_student_id,profile_url')
+      .from('students')
+      .select('id,photo_url')
       .eq('tenant_id', TENANT_ID)
-      .in('linked_student_id', ids);
+      .in('id', ids);
     if (Array.isArray(photos)) {
       for (const row of photos) {
-        photoUrlCache.set(row.linked_student_id, row.profile_url || '');
+        photoUrlCache.set(row.id, row.photo_url || '');
       }
     }
   } catch (_) {}

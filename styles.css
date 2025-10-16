@@ -258,14 +258,14 @@ h2 { margin: 12px 0 16px; }
   margin-right: auto;
 }
 
-.classic-notes { margin-top: 10px; font-size: 11px; color: #111; }
+.classic-notes { margin-top: 10px; font-size: 14px; color: #111; }
 .classic-notes .note { margin-top: 6px; }
 .classic-notes .center { text-align: center; }
 .classic-notes .small { font-size: 10px; }
 
 /* Table styling for classic layout */
 .classic-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-.classic-table th, .classic-table td { border: 2px solid #111; padding: 8px 10px; font-size: 13px; }
+.classic-table th, .classic-table td { border: 2px solid #111; padding: 8px 10px; font-size: 14px; }
 .classic-table thead th { background: #e5e7eb; font-weight: 700; text-align: center; }
 .classic-table td:nth-child(1), .classic-table td:nth-child(2) { text-align: center; white-space: nowrap; }
 .classic-table td:nth-child(3) { text-align: left; }

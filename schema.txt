@@ -39,6 +39,56 @@ CREATE TABLE public.assignments (
   CONSTRAINT assignments_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.teachers(id),
   CONSTRAINT assignments_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
 );
+CREATE TABLE public.bed_allocations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  application_id uuid NOT NULL,
+  student_id uuid NOT NULL,
+  bed_id uuid NOT NULL,
+  academic_year text NOT NULL,
+  start_date date,
+  end_date date,
+  status text NOT NULL DEFAULT 'pending_acceptance'::text CHECK (status = ANY (ARRAY['pending_acceptance'::text, 'active'::text, 'checked_in'::text, 'checked_out'::text, 'cancelled'::text, 'transferred'::text])),
+  acceptance_deadline timestamp with time zone,
+  student_response text CHECK (student_response = ANY (ARRAY['accepted'::text, 'rejected'::text])),
+  student_response_at timestamp with time zone,
+  monthly_rent numeric DEFAULT 0,
+  security_deposit numeric DEFAULT 0,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  tenant_id uuid NOT NULL,
+  CONSTRAINT bed_allocations_pkey PRIMARY KEY (id),
+  CONSTRAINT bed_allocations_application_id_fkey FOREIGN KEY (application_id) REFERENCES public.hostel_applications(id),
+  CONSTRAINT bed_allocations_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
+  CONSTRAINT bed_allocations_bed_id_fkey FOREIGN KEY (bed_id) REFERENCES public.beds(id),
+  CONSTRAINT bed_allocations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id),
+  CONSTRAINT bed_allocations_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.beds (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  room_id uuid NOT NULL,
+  bed_label text,
+  bed_type text DEFAULT 'normal'::text CHECK (bed_type = ANY (ARRAY['normal'::text, 'lower'::text, 'upper'::text, 'accessible'::text])),
+  status text NOT NULL DEFAULT 'available'::text CHECK (status = ANY (ARRAY['available'::text, 'occupied'::text, 'maintenance'::text, 'reserved'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  tenant_id uuid NOT NULL,
+  CONSTRAINT beds_pkey PRIMARY KEY (id),
+  CONSTRAINT beds_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id),
+  CONSTRAINT beds_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.blocks (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  hostel_id uuid NOT NULL,
+  name text NOT NULL,
+  description text,
+  total_floors integer DEFAULT 1,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  tenant_id uuid NOT NULL,
+  CONSTRAINT blocks_pkey PRIMARY KEY (id),
+  CONSTRAINT blocks_hostel_id_fkey FOREIGN KEY (hostel_id) REFERENCES public.hostels(id),
+  CONSTRAINT blocks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
 CREATE TABLE public.classes (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   class_name text NOT NULL,
@@ -291,7 +341,7 @@ CREATE TABLE public.hostel_fee_payments (
   due_date date,
   payment_mode text DEFAULT 'Cash'::text CHECK (payment_mode = ANY (ARRAY['Cash'::text, 'Card'::text, 'Online'::text, 'UPI'::text])),
   status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'partial'::text, 'paid'::text, 'overdue'::text, 'cancelled'::text])),
-  receipt_number text UNIQUE,
+  receipt_number text DEFAULT nextval('hostel_fee_receipt_seq'::regclass) UNIQUE,
   remarks text,
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -379,8 +429,11 @@ CREATE TABLE public.hostels (
   warden_phone text,
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  warden_id uuid,
+  amenities ARRAY,
   CONSTRAINT hostels_pkey PRIMARY KEY (id),
-  CONSTRAINT hostels_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+  CONSTRAINT hostels_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
+  CONSTRAINT hostels_warden_id_fkey FOREIGN KEY (warden_id) REFERENCES public.users(id)
 );
 CREATE TABLE public.leave_applications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -409,6 +462,27 @@ CREATE TABLE public.leave_applications (
   CONSTRAINT leave_applications_applied_by_fkey FOREIGN KEY (applied_by) REFERENCES public.users(id),
   CONSTRAINT leave_applications_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id),
   CONSTRAINT leave_applications_replacement_teacher_id_fkey FOREIGN KEY (replacement_teacher_id) REFERENCES public.teachers(id)
+);
+CREATE TABLE public.maintenance_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  hostel_id uuid,
+  room_id uuid,
+  bed_id uuid,
+  title text NOT NULL,
+  description text,
+  priority text DEFAULT 'medium'::text CHECK (priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text, 'urgent'::text])),
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'completed'::text, 'cancelled'::text])),
+  reported_by uuid NOT NULL,
+  assigned_to uuid,
+  estimated_cost numeric DEFAULT 0,
+  actual_cost numeric DEFAULT 0,
+  scheduled_date timestamp with time zone,
+  completed_date timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  tenant_id uuid NOT NULL,
+  CONSTRAINT maintenance_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT maintenance_logs_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
 );
 CREATE TABLE public.marks (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -486,6 +560,7 @@ CREATE TABLE public.parents (
   student_id uuid,
   relation text CHECK (relation = ANY (ARRAY['Father'::text, 'Mother'::text, 'Guardian'::text])),
   tenant_id uuid NOT NULL,
+  alternate_number character varying,
   CONSTRAINT parents_pkey PRIMARY KEY (id),
   CONSTRAINT parents_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
   CONSTRAINT parents_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id)
@@ -523,12 +598,46 @@ CREATE TABLE public.personal_tasks (
   CONSTRAINT personal_tasks_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
   CONSTRAINT personal_tasks_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
 );
+CREATE TABLE public.push_tokens (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  token text NOT NULL UNIQUE,
+  device_type text CHECK (device_type = ANY (ARRAY['ios'::text, 'android'::text, 'web'::text])),
+  device_name text,
+  app_version text,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  last_used timestamp with time zone,
+  tenant_id uuid NOT NULL,
+  CONSTRAINT push_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT push_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT push_tokens_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
 CREATE TABLE public.roles (
   id integer NOT NULL DEFAULT nextval('roles_id_seq'::regclass),
   role_name text NOT NULL,
   tenant_id uuid NOT NULL,
   CONSTRAINT roles_pkey PRIMARY KEY (id),
   CONSTRAINT roles_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
+);
+CREATE TABLE public.rooms (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  hostel_id uuid NOT NULL,
+  block_id uuid,
+  floor integer DEFAULT 1,
+  room_number text NOT NULL,
+  capacity integer NOT NULL DEFAULT 1,
+  room_type text DEFAULT 'standard'::text CHECK (room_type = ANY (ARRAY['standard'::text, 'deluxe'::text, 'premium'::text, 'accessible'::text])),
+  amenities ARRAY,
+  monthly_fee numeric DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  tenant_id uuid NOT NULL,
+  CONSTRAINT rooms_pkey PRIMARY KEY (id),
+  CONSTRAINT rooms_hostel_id_fkey FOREIGN KEY (hostel_id) REFERENCES public.hostels(id),
+  CONSTRAINT rooms_block_id_fkey FOREIGN KEY (block_id) REFERENCES public.blocks(id),
+  CONSTRAINT rooms_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id)
 );
 CREATE TABLE public.school_details (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -701,6 +810,7 @@ CREATE TABLE public.students (
   created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
   parent_id uuid,
   tenant_id uuid NOT NULL,
+  photo_url text,
   CONSTRAINT students_pkey PRIMARY KEY (id),
   CONSTRAINT students_class_id_fkey FOREIGN KEY (class_id) REFERENCES public.classes(id),
   CONSTRAINT students_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id),
@@ -820,6 +930,9 @@ CREATE TABLE public.tenants (
   logo_url text,
   timezone text DEFAULT 'UTC'::text,
   academic_year_start_month integer DEFAULT 4,
+  study_url text,
+  hallticket_url text,
+  markscard_url text,
   CONSTRAINT tenants_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.timetable_entries (
